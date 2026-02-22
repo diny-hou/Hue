@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { SliceItem } from './SliceEditor';
 
-interface MenuItem {
-    name: string;
-    path: string;
-}
+// Re-export type alias for internal use
+type MenuItem = SliceItem;
 
 const polarToCartesian = (centerX: number, centerY: number, radius: number, angleInDegrees: number) => {
     const angleInRadians = (angleInDegrees * Math.PI) / 180.0;
@@ -35,6 +34,8 @@ export const PieMenu: React.FC = () => {
     const [items, setItems] = useState<MenuItem[]>([]);
     const [activeIndex, setActiveIndex] = useState<number | null>(null);
     const [isVisible, setIsVisible] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
+    const isEditorOpenRef = React.useRef(false);
     const hoveredIndexRef = React.useRef<number | null>(null);
 
     useEffect(() => {
@@ -54,7 +55,7 @@ export const PieMenu: React.FC = () => {
                         const path = paths[0];
                         let name = path.split('\\').pop()?.split('/').pop() || 'App';
                         if (name.endsWith('.exe')) name = name.substring(0, name.length - 4);
-                        newItems[hoveredIndexRef.current!] = { name, path };
+                        newItems[hoveredIndexRef.current!] = { name, path, children: [] };
                         invoke('update_config', { newConfig: { items: newItems } }).catch(console.error);
                         return newItems;
                     });
@@ -65,29 +66,39 @@ export const PieMenu: React.FC = () => {
             listen('tauri://file-drop', handleDrop).then(f => unlistenFile = f as any);
         });
 
-        const unlistenHotkey = import('@tauri-apps/api/event').then(({ listen }) => {
+        const unlistenVisibility = import('@tauri-apps/api/event').then(({ listen }) => {
             const l1 = listen('menu-show', () => {
                 setIsVisible(true);
             });
-            const l2 = listen('hotkey-released', () => {
+            const l2 = listen('menu-hide', () => {
+                if (isEditorOpenRef.current) return;
                 setIsVisible(false);
-                if (hoveredIndexRef.current !== null) {
-                    invoke('launch_app', { path: configRef.current[hoveredIndexRef.current].path }).catch(console.error);
-                } else {
-                    invoke('hide_menu').catch(console.error);
-                }
+                setIsDragging(false);
+                updateActiveIndex(null);
+                invoke('hide_menu').catch(console.error);
             });
             // Also reset on focus loss
             const l3 = listen('tauri://blur', () => {
+                if (isEditorOpenRef.current) return;
                 setIsVisible(false);
+                setIsDragging(false);
+                updateActiveIndex(null);
             });
-            return Promise.all([l1, l2, l3]);
+            const l4 = listen('reload-config', () => {
+                invoke<{ items: MenuItem[] }>('get_config')
+                    .then(config => setItems(config.items))
+                    .catch(console.error);
+            });
+            const l5 = listen('editor-closed', () => {
+                isEditorOpenRef.current = false;
+            });
+            return Promise.all([l1, l2, l3, l4, l5]);
         });
 
         return () => {
             if (unlistenDrag) unlistenDrag();
             if (unlistenFile) unlistenFile();
-            unlistenHotkey.then(listeners => listeners.forEach(un => un()));
+            unlistenVisibility.then(listeners => listeners.forEach(un => un()));
         };
     }, []);
 
@@ -103,16 +114,27 @@ export const PieMenu: React.FC = () => {
         hoveredIndexRef.current = index;
     };
 
-    if (items.length === 0) return null;
 
-    const size = 400;
+    const size = 500;
     const center = size / 2;
     const outerRadius = 180;
     const innerRadius = 70;
 
     const sliceAngle = 360 / items.length;
 
-    const handleMouseMove = (e: React.MouseEvent) => {
+    const handlePointerDown = (e: React.PointerEvent) => {
+        if (isEditorOpenRef.current) return;
+        setIsDragging(true);
+        handlePointerMove(e); // Initialize angle calculation immediately if dragging starts off-center
+    };
+
+    const handlePointerMove = (e: React.PointerEvent) => {
+        if (!isDragging) {
+            // If we are just moving the mouse without dragging in a Marking Menu,
+            // we typically don't highlight anything.
+            return;
+        }
+
         const rect = e.currentTarget.getBoundingClientRect();
         // Mouse position relative to the center of the 400x400 container
         const dx = e.clientX - rect.left - center;
@@ -141,8 +163,31 @@ export const PieMenu: React.FC = () => {
         }
     };
 
+    const handlePointerUp = (_e: React.PointerEvent) => {
+        if (!isDragging) return;
+        setIsDragging(false);
+
+        if (activeIndex !== null) {
+            invoke('launch_app', { path: configRef.current[activeIndex].path }).catch(console.error);
+        }
+
+        // Hide the menu and reset state
+        setIsVisible(false);
+        updateActiveIndex(null);
+        invoke('hide_menu').catch(console.error);
+    };
+
+    // Use onContextMenu to prevent the right-click menu, allowing drag with both left/right click.
+    const handleContextMenu = (_e: React.MouseEvent) => _e.preventDefault();
+
     return (
-        <div className={`pie-menu-container ${isVisible ? 'visible' : ''}`} onMouseMove={handleMouseMove}>
+        <div
+            className={`pie-menu-container ${isVisible ? 'visible' : ''}`}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onContextMenu={handleContextMenu}
+        >
             <svg className="pie-svg" viewBox={`0 0 ${size} ${size}`}>
                 <defs>
                     <filter id="glass-blur">
@@ -182,13 +227,40 @@ export const PieMenu: React.FC = () => {
                         key={index}
                         className="slice-content"
                         style={{ left: `${x}px`, top: `${y}px` }}
+                        onPointerDown={e => {
+                            if (e.button === 2) e.stopPropagation();
+                        }}
+                        onPointerUp={e => {
+                            if (e.button === 2) e.stopPropagation();
+                        }}
+                        onContextMenu={e => {
+                            e.preventDefault();
+                            e.stopPropagation();
+
+                            // Send editor command to spawn radially outward
+                            const cx = x - center;
+                            const cy = y - center;
+                            const length = Math.sqrt(cx * cx + cy * cy);
+                            // Push the spawn point outward
+                            const outRadius = outerRadius + 80;
+                            const spawnX = center + (cx / length) * outRadius;
+                            const spawnY = center + (cy / length) * outRadius;
+
+                            isEditorOpenRef.current = true;
+                            invoke('open_editor', {
+                                index: index,
+                                item: item,
+                                clientX: spawnX,
+                                clientY: Math.max(0, spawnY - 120), // minor offset to align visually
+                            }).catch(console.error);
+                        }}
                     >
                         {item.name}
                     </div>
                 );
             })}
 
-            {/* Removed the center "CLOSE" button since it triggers on hotkey release now */}
+            {/* Center HUE label */}
             <div className="center-hole">
                 <div className="center-text">HUE</div>
             </div>

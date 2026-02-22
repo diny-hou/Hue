@@ -19,6 +19,17 @@
         "transparent": true,
         "visible": false,
         "alwaysOnTop": true
+      },
+      {
+        "label": "editor",
+        "title": "Panel Editor",
+        "url": "/?editor=true",
+        "width": 300,
+        "height": 260,
+        "decorations": false,
+        "transparent": true,
+        "visible": false,
+        "alwaysOnTop": true
       }
     ],
     "security": {

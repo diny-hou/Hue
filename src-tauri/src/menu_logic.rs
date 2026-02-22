@@ -1,12 +1,14 @@
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
-use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct MenuItem {
     pub name: String,
     pub path: String,
+    #[serde(default)]
+    pub children: Vec<MenuItem>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -18,21 +20,57 @@ impl Default for MenuConfig {
     fn default() -> Self {
         Self {
             items: vec![
-                MenuItem { name: "Terminal".into(), path: "wt.exe".into() },
-                MenuItem { name: "Browser".into(), path: "chrome.exe".into() },
-                MenuItem { name: "Explorer".into(), path: "explorer.exe".into() },
-                MenuItem { name: "Notepad".into(), path: "notepad.exe".into() },
-                MenuItem { name: "Settings".into(), path: "ms-settings:".into() },
-                MenuItem { name: "TaskMgr".into(), path: "taskmgr.exe".into() },
-                MenuItem { name: "Calc".into(), path: "calc.exe".into() },
-                MenuItem { name: "Paint".into(), path: "mspaint.exe".into() },
+                MenuItem {
+                    name: "Terminal".into(),
+                    path: "wt.exe".into(),
+                    children: vec![],
+                },
+                MenuItem {
+                    name: "Browser".into(),
+                    path: "chrome.exe".into(),
+                    children: vec![],
+                },
+                MenuItem {
+                    name: "Explorer".into(),
+                    path: "explorer.exe".into(),
+                    children: vec![],
+                },
+                MenuItem {
+                    name: "Notepad".into(),
+                    path: "notepad.exe".into(),
+                    children: vec![],
+                },
+                MenuItem {
+                    name: "Settings".into(),
+                    path: "ms-settings:".into(),
+                    children: vec![],
+                },
+                MenuItem {
+                    name: "TaskMgr".into(),
+                    path: "taskmgr.exe".into(),
+                    children: vec![],
+                },
+                MenuItem {
+                    name: "Calc".into(),
+                    path: "calc.exe".into(),
+                    children: vec![],
+                },
+                MenuItem {
+                    name: "Paint".into(),
+                    path: "mspaint.exe".into(),
+                    children: vec![],
+                },
             ],
         }
     }
 }
 
 pub fn get_config_path(app_handle: &AppHandle) -> PathBuf {
-    app_handle.path().app_config_dir().unwrap_or_default().join("menu.json")
+    app_handle
+        .path()
+        .app_config_dir()
+        .unwrap_or_default()
+        .join("menu.json")
 }
 
 pub fn load_config(app_handle: &AppHandle) -> MenuConfig {

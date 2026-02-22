@@ -17,6 +17,7 @@ pub fn run() {
             // We could also focus the existing window here if desired.
         }))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             use std::str::FromStr;
@@ -53,8 +54,7 @@ pub fn run() {
                                 let _ = window.set_focus();
                             }
                         } else if event.state() == ShortcutState::Released {
-                            // Key Released -> Tell React to execute selection & hide
-                            let _ = window.emit("hotkey-released", ());
+                            let _ = window.emit("menu-hide", ());
                         }
                     }
                 });
@@ -69,19 +69,14 @@ pub fn run() {
 
             Ok(())
         })
-        .on_window_event(|window, event| match event {
-            tauri::WindowEvent::Focused(focused) => {
-                if !focused {
-                    let _ = window.hide();
-                }
-            }
-            _ => {}
-        })
         .invoke_handler(tauri::generate_handler![
             commands::launch_app,
             commands::hide_menu,
             commands::get_config,
-            commands::update_config
+            commands::update_config,
+            commands::pick_file,
+            commands::open_editor,
+            commands::close_editor
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
