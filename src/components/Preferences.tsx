@@ -47,6 +47,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     const [textColor, setTextColor] = useState(config.appearance?.text_color ?? '#ffffff');
     const [animType, setAnimType] = useState(config.appearance?.animation_type ?? 'spread');
     const [hoverScale, setHoverScale] = useState(config.appearance?.hover_scale ?? 'small');
+    const [hoverAnim, setHoverAnim] = useState(config.appearance?.hover_animation || 'none');
 
     const [isRecording, setIsRecording] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -105,6 +106,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                     text_color: textColor,
                     animation_type: animType,
                     hover_scale: hoverScale,
+                    hover_animation: hoverAnim,
                 }
             };
             await invoke('update_config', { newConfig });
@@ -273,6 +275,25 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 <option value="small">Small (1.05x)</option>
                                 <option value="medium">Medium (1.10x)</option>
                                 <option value="large">Large (1.15x)</option>
+                            </select>
+                        </div>
+                        <div className="pref-row">
+                            <label>Hover Animation</label>
+                            <select
+                                value={hoverAnim}
+                                onChange={(e) => setHoverAnim(e.target.value)}
+                                style={{
+                                    background: 'rgba(255, 255, 255, 0.1)',
+                                    color: 'white',
+                                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                                    padding: '4px',
+                                    borderRadius: '4px'
+                                }}
+                            >
+                                <option value="none">None</option>
+                                <option value="pulse">Pulse</option>
+                                <option value="glow">Glow</option>
+                                <option value="wobble">Wobble</option>
                             </select>
                         </div>
                     </>

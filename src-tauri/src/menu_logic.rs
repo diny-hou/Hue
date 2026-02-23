@@ -11,6 +11,12 @@ pub struct AppearanceConfig {
     pub text_color: String,
     pub animation_type: String, // "none", "spread", "fade", "bounce"
     pub hover_scale: String,    // "none", "small", "medium", "large"
+    #[serde(default = "default_hover_animation")]
+    pub hover_animation: String, // "none", "jiggle", "pulse", "glow"
+}
+
+fn default_hover_animation() -> String {
+    "none".to_string()
 }
 
 impl Default for AppearanceConfig {
@@ -22,6 +28,7 @@ impl Default for AppearanceConfig {
             text_color: "#ffffff".to_string(),
             animation_type: "spread".to_string(),
             hover_scale: "small".to_string(),
+            hover_animation: default_hover_animation(),
         }
     }
 }

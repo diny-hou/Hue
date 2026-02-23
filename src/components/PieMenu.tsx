@@ -9,6 +9,7 @@ export interface AppearanceConfig {
     text_color: string;
     animation_type: string;
     hover_scale: string;
+    hover_animation?: string;
 }
 
 export interface MenuConfig {
@@ -79,7 +80,7 @@ export const PieMenu: React.FC = () => {
                         let name = path.split('\\').pop()?.split('/').pop() || 'App';
                         if (name.endsWith('.exe')) name = name.substring(0, name.length - 4);
                         newItems[hoveredIndexRef.current!] = { name, path, children: [] };
-                        const newConfig = configFull ? { ...configFull, items: newItems } : { global_shortcut: 'alt+space', appearance: { panel_opacity: 0.8, panel_color: '#333333', text_size: 14, text_color: '#ffffff', animation_type: 'spread', hover_scale: 'small' }, items: newItems };
+                        const newConfig = configFull ? { ...configFull, items: newItems } : { global_shortcut: 'alt+space', appearance: { panel_opacity: 0.8, panel_color: '#333333', text_size: 14, text_color: '#ffffff', animation_type: 'spread', hover_scale: 'small', hover_animation: 'none' }, items: newItems };
                         invoke('update_config', { newConfig }).catch(console.error);
                         if (configFull) setConfigFull({ ...configFull, items: newItems });
                         return newItems;
@@ -361,6 +362,7 @@ export const PieMenu: React.FC = () => {
     }, [configFull]);
 
     const animClass = configFull?.appearance?.animation_type ? `anim-${configFull.appearance.animation_type}` : 'anim-spread';
+    const hoverAnimClass = configFull?.appearance?.hover_animation ? `hover-anim-${configFull.appearance.hover_animation}` : 'hover-anim-none';
 
     return (
         <div
@@ -389,7 +391,7 @@ export const PieMenu: React.FC = () => {
                         <path
                             key={index}
                             d={pathD}
-                            className={`slice-path ${isActive ? 'active' : ''}`}
+                            className={`slice-path ${isActive ? 'active' : ''} ${hoverAnimClass}`}
                             onContextMenu={e => {
                                 e.preventDefault();
                                 e.stopPropagation();
@@ -418,7 +420,7 @@ export const PieMenu: React.FC = () => {
                             <path
                                 key={`child-${activeIndex}-${idx}`}
                                 d={pathD}
-                                className={`slice-path outer-slice ${isChildActive ? 'active' : ''}`}
+                                className={`slice-path outer-slice ${isChildActive ? 'active' : ''} ${hoverAnimClass}`}
                                 onContextMenu={e => {
                                     e.preventDefault();
                                     e.stopPropagation();
@@ -552,7 +554,7 @@ export const PieMenu: React.FC = () => {
                         }
 
                         setItems(newItems);
-                        const newConfig = configFull ? { ...configFull, items: newItems } : { global_shortcut: 'alt+space', appearance: { panel_opacity: 0.8, panel_color: '#333333', text_size: 14, text_color: '#ffffff', animation_type: 'spread', hover_scale: 'small' }, items: newItems };
+                        const newConfig = configFull ? { ...configFull, items: newItems } : { global_shortcut: 'alt+space', appearance: { panel_opacity: 0.8, panel_color: '#333333', text_size: 14, text_color: '#ffffff', animation_type: 'spread', hover_scale: 'small', hover_animation: 'none' }, items: newItems };
                         invoke('update_config', { newConfig }).catch(console.error);
                         if (configFull) setConfigFull(newConfig);
                         setEditingIndex(null);
