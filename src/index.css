@@ -33,8 +33,8 @@ body {
 
 /* Glassmorphism Pie Menu Container */
 .pie-menu-container {
-  width: 500px;
-  height: 500px;
+  width: 800px;
+  height: 800px;
   border-radius: 50%;
   position: relative;
   opacity: 0;
@@ -77,6 +77,8 @@ body {
   transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .slice-path.active {
@@ -99,6 +101,42 @@ body {
   font-weight: 500;
   color: white;
   cursor: context-menu;
+}
+
+.slice-name {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
+}
+
+.slice-path {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.35);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
+  margin-top: 2px;
+}
+
+/* Outer ring slices */
+.outer-slice {
+  fill: rgba(15, 15, 25, 0.35);
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 1;
+}
+
+.outer-slice.active {
+  fill: rgba(99, 102, 241, 0.25);
+}
+
+.outer-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  pointer-events: none;
 }
 
 /* Center button / hole */
@@ -128,6 +166,8 @@ body {
 
 /* ─── Slice Editor Popover ─────────────────────────────── */
 .slice-editor {
+  position: absolute;
+  transform: translate(-50%, -50%);
   z-index: 100;
   background: rgba(20, 20, 30, 0.85);
   backdrop-filter: blur(24px);
@@ -215,6 +255,7 @@ body {
 }
 
 .slice-editor-save,
+.slice-editor-clear,
 .slice-editor-cancel {
   flex: 1;
   border: none;
@@ -235,11 +276,202 @@ body {
   filter: brightness(1.2);
 }
 
+.slice-editor-clear,
 .slice-editor-cancel {
   background: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.8);
 }
 
+.slice-editor-clear:hover,
 .slice-editor-cancel:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.slice-editor-env-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.slice-editor-add-env {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  border-radius: 4px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.slice-editor-add-env:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.slice-editor-env-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 100px;
+  overflow-y: auto;
+  margin-bottom: 15px;
+}
+
+.slice-editor-env-row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.env-key {
+  flex: 1;
+  text-transform: uppercase;
+}
+
+.env-equals {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+}
+
+.env-val {
+  flex: 2;
+}
+
+.slice-editor-remove-env {
+  background: rgba(255, 50, 50, 0.2);
+  border: 1px solid rgba(255, 50, 50, 0.3);
+  color: white;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.slice-editor-remove-env:hover {
+  background: rgba(255, 50, 50, 0.4);
+}
+
+/* Preferences Modal */
+.preferences-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 350px;
+  background: rgba(20, 20, 20, 0.7);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  color: white;
+  z-index: 1000;
+}
+
+.preferences-header {
+  font-size: 16px;
+  font-weight: 600;
+  cursor: move;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.preferences-body {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.pref-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pref-row label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.pref-record-btn {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 13px;
+  cursor: pointer;
+  min-width: 120px;
+  transition: all 0.2s;
+}
+
+.pref-record-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.pref-record-btn.recording {
+  border-color: var(--accent-color);
+  background: rgba(var(--accent-color-rgb), 0.2);
+  animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+  from {
+    box-shadow: 0 0 0px var(--accent-color);
+  }
+
+  to {
+    box-shadow: 0 0 10px var(--accent-color);
+  }
+}
+
+.preferences-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 25px;
+}
+
+.pref-save,
+.pref-cancel {
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.pref-save {
+  background: var(--accent-color);
+  color: #fff;
+}
+
+.pref-save:hover:not(:disabled) {
+  filter: brightness(1.2);
+}
+
+.pref-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pref-cancel {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.pref-cancel:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.18);
 }

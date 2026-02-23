@@ -1,11 +1,5 @@
 use tauri::Manager;
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
 mod commands;
 mod menu_logic;
 
@@ -20,48 +14,15 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
-            use std::str::FromStr;
-            use tauri::Emitter;
-            use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+            use std::sync::Mutex;
 
-            let shortcut = Shortcut::from_str("alt+space").expect("failed to parse shortcut");
-
+            let config = menu_logic::load_config(&app.handle());
             let app_handle = app.handle().clone();
-            let result = app
-                .global_shortcut()
-                .on_shortcut(shortcut, move |_app, _sc, event| {
-                    if let Some(window) = app_handle.get_webview_window("main") {
-                        if event.state() == ShortcutState::Pressed {
-                            let is_visible = window.is_visible().unwrap_or(false);
-                            if !is_visible {
-                                // Show and center menu
-                                if let (Ok(pos), Ok(scale_factor)) =
-                                    (window.cursor_position(), window.scale_factor())
-                                {
-                                    // In Tauri v2, cursor_position() returns the global physical position.
-                                    // Window size is 500x500 logical pixels.
-                                    // Offset to center is -250.0 logical pixels, converted to physical.
-                                    let offset = 250.0 * scale_factor;
 
-                                    let new_pos = tauri::PhysicalPosition {
-                                        x: (pos.x - offset) as i32,
-                                        y: (pos.y - offset) as i32,
-                                    };
-                                    let _ = window.set_position(tauri::Position::Physical(new_pos));
-                                }
-                                let _ = window.emit("menu-show", ());
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                        } else if event.state() == ShortcutState::Released {
-                            let _ = window.emit("menu-hide", ());
-                        }
-                    }
-                });
+            // Store the current shortcut string in state so it can be updated
+            app.manage(Mutex::new(config.global_shortcut.clone()));
 
-            if let Err(e) = result {
-                eprintln!("Warning: could not register global shortcut: {}", e);
-            }
+            register_shortcut(&app_handle, &config.global_shortcut);
 
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_shadow(false);
@@ -75,9 +36,54 @@ pub fn run() {
             commands::get_config,
             commands::update_config,
             commands::pick_file,
-            commands::open_editor,
-            commands::close_editor
+            commands::update_shortcut
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+pub fn register_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) {
+    use std::str::FromStr;
+    use tauri::Emitter;
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+
+    let shortcut = match Shortcut::from_str(shortcut_str) {
+        Ok(s) => s,
+        Err(_) => {
+            eprintln!("Warning: failed to parse shortcut: {}", shortcut_str);
+            return;
+        }
+    };
+
+    let handle_clone = app_handle.clone();
+    let result = app_handle
+        .global_shortcut()
+        .on_shortcut(shortcut, move |_app, _sc, event| {
+            if let Some(window) = handle_clone.get_webview_window("main") {
+                if event.state() == ShortcutState::Pressed {
+                    let is_visible = window.is_visible().unwrap_or(false);
+                    if !is_visible {
+                        if let (Ok(pos), Ok(scale_factor)) =
+                            (window.cursor_position(), window.scale_factor())
+                        {
+                            let offset = 400.0 * scale_factor;
+                            let new_pos = tauri::PhysicalPosition {
+                                x: (pos.x - offset) as i32,
+                                y: (pos.y - offset) as i32,
+                            };
+                            let _ = window.set_position(tauri::Position::Physical(new_pos));
+                        }
+                        let _ = window.emit("menu-show", ());
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                } else if event.state() == ShortcutState::Released {
+                    let _ = window.emit("menu-hide", ());
+                }
+            }
+        });
+
+    if let Err(e) = result {
+        eprintln!("Warning: could not register global shortcut: {}", e);
+    }
 }

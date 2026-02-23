@@ -13,19 +13,8 @@
     "windows": [
       {
         "title": "Hue",
-        "width": 500,
-        "height": 500,
-        "decorations": false,
-        "transparent": true,
-        "visible": false,
-        "alwaysOnTop": true
-      },
-      {
-        "label": "editor",
-        "title": "Panel Editor",
-        "url": "/?editor=true",
-        "width": 300,
-        "height": 260,
+        "width": 800,
+        "height": 800,
         "decorations": false,
         "transparent": true,
         "visible": false,
