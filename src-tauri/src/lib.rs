@@ -36,7 +36,11 @@ pub fn run() {
             commands::get_config,
             commands::update_config,
             commands::pick_file,
-            commands::update_shortcut
+            commands::pick_folder,
+            commands::update_shortcut,
+            commands::open_preferences_window,
+            commands::close_preferences_window,
+            commands::empty_all_slices
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -66,7 +70,7 @@ pub fn register_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) {
                         if let (Ok(pos), Ok(scale_factor)) =
                             (window.cursor_position(), window.scale_factor())
                         {
-                            let offset = 400.0 * scale_factor;
+                            let offset = 500.0 * scale_factor;
                             let new_pos = tauri::PhysicalPosition {
                                 x: (pos.x - offset) as i32,
                                 y: (pos.y - offset) as i32,

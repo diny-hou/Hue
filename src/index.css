@@ -33,8 +33,8 @@ body {
 
 /* Glassmorphism Pie Menu Container */
 .pie-menu-container {
-  width: 800px;
-  height: 800px;
+  width: 1000px;
+  height: 1000px;
   border-radius: 50%;
   position: relative;
   opacity: 0;
@@ -47,7 +47,23 @@ body {
   opacity: 1;
   transform: scale(1);
   pointer-events: auto;
+}
+
+/* Animation variants */
+.pie-menu-container.anim-none.visible {
+  transition: none;
+}
+
+.pie-menu-container.anim-fade.visible {
+  transition: opacity 0.15s ease;
+}
+
+.pie-menu-container.anim-spread.visible {
   animation: spread 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.pie-menu-container.anim-bounce.visible {
+  animation: bounce 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 @keyframes spread {
@@ -62,6 +78,26 @@ body {
   }
 }
 
+@keyframes bounce {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+
+  75% {
+    transform: scale(0.95);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
 .pie-svg {
   width: 100%;
   height: 100%;
@@ -71,7 +107,8 @@ body {
 
 /* Individual Slice */
 .slice-path {
-  fill: var(--bg-color);
+  fill: var(--panel-color, var(--bg-color));
+  opacity: var(--panel-opacity, 0.8);
   stroke: var(--border-color);
   stroke-width: 2;
   transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
@@ -79,11 +116,14 @@ body {
   -webkit-backdrop-filter: blur(20px);
   pointer-events: auto;
   cursor: pointer;
+  transform-origin: center;
 }
 
-.slice-path.active {
+.slice-path.active,
+.slice-path:hover {
   fill: var(--hover-color);
   filter: brightness(1.2);
+  transform: scale(var(--hover-scale, 1.05));
 }
 
 /* Icons/Text inside slices */
@@ -97,9 +137,9 @@ body {
   pointer-events: auto;
   /* Must be auto so right-click reaches the handler */
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-  font-size: 14px;
+  font-size: var(--text-size, 14px);
   font-weight: 500;
-  color: white;
+  color: var(--text-color, white);
   cursor: context-menu;
 }
 
@@ -124,7 +164,9 @@ body {
 
 /* Outer ring slices */
 .outer-slice {
-  fill: rgba(15, 15, 25, 0.35);
+  fill: var(--panel-color, rgba(15, 15, 25, 0.35));
+  opacity: calc(var(--panel-opacity, 0.8) - 0.2);
+  /* Slightly more transparent */
   stroke: rgba(255, 255, 255, 0.08);
   stroke-width: 1;
 }
@@ -176,12 +218,33 @@ body {
   border-radius: 14px;
   padding: 16px 18px;
   min-width: 240px;
+  max-height: 520px;
+  overflow-y: auto;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
   display: flex;
   flex-direction: column;
   gap: 8px;
   color: #fff;
   font-family: 'Inter', system-ui, sans-serif;
+}
+
+.slice-editor::-webkit-scrollbar {
+  width: 6px;
+}
+
+.slice-editor::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 8px 0;
+}
+
+.slice-editor::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.35);
+  border-radius: 3px;
+  transition: background 0.2s;
+}
+
+.slice-editor::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.6);
 }
 
 .slice-editor-title {
@@ -218,10 +281,50 @@ body {
   border-color: var(--accent-color);
 }
 
+.slice-editor-type-toggle {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 8px 0;
+}
+
+.type-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.6);
+  padding: 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.type-btn.active {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: var(--accent-color);
+  color: white;
+}
+
+.type-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .slice-editor-path-row {
   display: flex;
   gap: 6px;
   align-items: center;
+}
+
+.slice-editor-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.slice-editor-group-children {
+  margin-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 12px;
 }
 
 .slice-editor-path-row .slice-editor-input {
@@ -360,13 +463,12 @@ body {
 
 /* Preferences Modal */
 .preferences-modal {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 350px;
-  background: rgba(20, 20, 20, 0.7);
-  backdrop-filter: blur(20px);
+  width: 100vw;
+  height: 100vh;
+  box-sizing: border-box;
+  background: rgba(20, 20, 20, 0.75);
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
@@ -381,14 +483,45 @@ body {
   font-size: 16px;
   font-weight: 600;
   cursor: move;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
   text-align: center;
+}
+
+.preferences-tabs {
+  display: flex;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+}
+
+.preferences-tabs button {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.preferences-tabs button:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.preferences-tabs button.active {
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .preferences-body {
   display: flex;
   flex-direction: column;
   gap: 15px;
+  min-height: 120px;
 }
 
 .pref-row {

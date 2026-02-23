@@ -13,8 +13,19 @@
     "windows": [
       {
         "title": "Hue",
-        "width": 800,
-        "height": 800,
+        "width": 1000,
+        "height": 1000,
+        "decorations": false,
+        "transparent": true,
+        "visible": false,
+        "alwaysOnTop": true
+      },
+      {
+        "label": "preferences",
+        "url": "/#preferences",
+        "title": "Hue Preferences",
+        "width": 400,
+        "height": 600,
         "decorations": false,
         "transparent": true,
         "visible": false,
