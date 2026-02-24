@@ -160,12 +160,12 @@ export const PieMenu: React.FC = () => {
     const halfSlice = sliceAngle / 2; // Offset so panels CENTER on cardinal directions
 
     // Child ring dimensions
-    const childInnerRadius = 185; // slightly closer to feel connected
+    const childInnerRadius = 180; // connect seamlessly with outerRadius
     const childOuterRadius = 300;
 
-    // We will display 3 children slots per parent as an extension of the parent slice
-    const maxChildrenVisible = 3;
-    const childFanAngle = sliceAngle; // Total angle span matches the parent's outer edge
+    // We will display 8 children slots per parent in a full circle
+    const maxChildrenVisible = 8;
+    const childFanAngle = 360; // Total angle span is a full circle
     const childSliceAngle = childFanAngle / maxChildrenVisible;
     const childHalfSlice = childSliceAngle / 2;
 
@@ -214,30 +214,12 @@ export const PieMenu: React.FC = () => {
         if (isActiveGroup) {
             // Check if mouse is in the outer child ring area
             if (distance >= innerRadius && distance <= childOuterRadius) {
-                // Determine if we are hovering a child slice
-                const parentAngle = activeIndex * sliceAngle;
+                // Full circular sub-menu mapping (8 directions)
+                const childAdjusted = (angleDeg + childHalfSlice) % 360;
+                const childIndex = Math.floor(childAdjusted / childSliceAngle);
 
-                // Calculate angle difference relative to parent angle
-                let diff = angleDeg - parentAngle;
-                // Normalize diff to -180..180
-                diff = (diff + 180) % 360;
-                if (diff < 0) diff += 360;
-                diff -= 180;
-
-                // The fan spans from -childFanAngle/2 to +childFanAngle/2 (e.g. -90 to 90)
-                const startFan = -childFanAngle / 2;
-                const endFan = childFanAngle / 2;
-
-                if (diff >= startFan && diff <= endFan) {
-                    // We are inside the fan angles, figure out which child
-                    const childLocalAngle = diff - startFan; // 0 to 180
-                    const childIndex = Math.floor(childLocalAngle / childSliceAngle);
-
-                    if (childIndex >= 0 && childIndex < maxChildrenVisible) { // Check against maxChildrenVisible
-                        setActiveChildIndex(childIndex);
-                    } else {
-                        setActiveChildIndex(null);
-                    }
+                if (childIndex >= 0 && childIndex < maxChildrenVisible) {
+                    setActiveChildIndex(childIndex);
                 } else {
                     setActiveChildIndex(null);
                 }
@@ -299,9 +281,7 @@ export const PieMenu: React.FC = () => {
         setEditingChildIndex(childIdx);
 
         if (childIdx !== null) {
-            const parentAngle = index * sliceAngle;
-            const startFanAngle = parentAngle - (childFanAngle / 2);
-            const midAngle = startFanAngle + (childIdx * childSliceAngle) + childHalfSlice;
+            const midAngle = childIdx * childSliceAngle;
 
             const angleInRadians = ((midAngle - 90) * Math.PI) / 180.0;
             const outRadius = childOuterRadius + 80;
@@ -385,17 +365,30 @@ export const PieMenu: React.FC = () => {
                     const endAngle = startAngle + sliceAngle - 2;
 
                     const pathD = describeArc(center, center, innerRadius, outerRadius, startAngle, endAngle);
-                    const isActive = activeIndex === index;
+
+                    const isGroupOpen = activeIndex !== null && items[activeIndex] && (!items[activeIndex].path || (items[activeIndex].children && items[activeIndex].children.length > 0));
+
+                    let isActive = false;
+                    if (isGroupOpen) {
+                        isActive = activeChildIndex === index;
+                    } else {
+                        isActive = activeIndex === index;
+                    }
 
                     return (
                         <path
                             key={index}
                             d={pathD}
                             className={`slice-path ${isActive ? 'active' : ''} ${hoverAnimClass}`}
+                            style={{ opacity: isGroupOpen && activeIndex !== index && activeChildIndex !== index ? 0.3 : undefined }}
                             onContextMenu={e => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                handleOpenEditor(index);
+                                if (isGroupOpen) {
+                                    handleOpenEditor(activeIndex, index);
+                                } else {
+                                    handleOpenEditor(index);
+                                }
                             }}
                         />
                     );
@@ -407,12 +400,9 @@ export const PieMenu: React.FC = () => {
                     const isGroup = !currentItem.path || (currentItem.children && currentItem.children.length > 0);
                     if (!isGroup) return null;
 
-                    const parentAngle = activeIndex * sliceAngle;
-
                     return Array.from({ length: maxChildrenVisible }).map((_, idx) => {
-                        const startFanAngle = parentAngle - (childFanAngle / 2);
-                        const startAngle = startFanAngle + (idx * childSliceAngle);
-                        const endAngle = startAngle + childSliceAngle - 1; // 1 degree gap for smaller slices
+                        const startAngle = idx * childSliceAngle - childHalfSlice;
+                        const endAngle = startAngle + childSliceAngle - 2; // gap for aesthetics
                         const pathD = describeArc(center, center, childInnerRadius, childOuterRadius, startAngle, endAngle);
                         const isChildActive = activeChildIndex === idx;
 
@@ -439,12 +429,9 @@ export const PieMenu: React.FC = () => {
                 const isGroup = !currentItem.path || (currentItem.children && currentItem.children.length > 0);
                 if (!isGroup) return null;
 
-                const parentAngle = activeIndex * sliceAngle;
-
                 return Array.from({ length: maxChildrenVisible }).map((_, idx) => {
                     const child = currentItem.children?.[idx];
-                    const startFanAngle = parentAngle - (childFanAngle / 2);
-                    const midAngle = startFanAngle + (idx * childSliceAngle) + childHalfSlice;
+                    const midAngle = idx * childSliceAngle;
 
                     const textRadius = childInnerRadius + (childOuterRadius - childInnerRadius) / 2;
                     const angleInRadians = ((midAngle - 90) * Math.PI) / 180.0;
@@ -492,7 +479,7 @@ export const PieMenu: React.FC = () => {
                     <div
                         key={index}
                         className="slice-content"
-                        style={{ left: `${x}px`, top: `${y}px` }}
+                        style={{ left: `${x}px`, top: `${y}px`, opacity: activeIndex !== null && activeIndex !== index ? 0.3 : 1 }}
                         onPointerDown={e => {
                             if (e.button === 2) e.stopPropagation();
                         }}
@@ -502,7 +489,12 @@ export const PieMenu: React.FC = () => {
                         onContextMenu={e => {
                             e.preventDefault();
                             e.stopPropagation();
-                            handleOpenEditor(index);
+                            const isGroupOpen = activeIndex !== null && items[activeIndex] && (!items[activeIndex].path || (items[activeIndex].children && items[activeIndex].children.length > 0));
+                            if (isGroupOpen) {
+                                handleOpenEditor(activeIndex, index);
+                            } else {
+                                handleOpenEditor(index);
+                            }
                         }}
                     >
                         {item.name}
