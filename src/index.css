@@ -361,8 +361,16 @@ body {
 
 .slice-editor-type-toggle {
   display: flex;
-  gap: 8px;
-  margin: 4px 0 8px 0;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.slice-editor-inner-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .type-btn {
@@ -395,11 +403,13 @@ body {
 }
 
 .slice-editor-body {
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+  padding-right: 0.25rem;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  flex: 1;
-  padding-right: 4px;
+  gap: 1rem;
 }
 
 .slice-editor-group-children {
@@ -459,13 +469,81 @@ body {
 }
 
 .slice-editor-save:hover {
-  filter: brightness(1.2);
+  background: rgba(255, 255, 255, 1);
 }
 
 .slice-editor-clear,
 .slice-editor-cancel {
   background: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.8);
+}
+
+.slice-editor-child-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.slice-editor-child-row.dragging {
+  opacity: 0.8;
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  z-index: 10;
+  position: relative;
+  cursor: ns-resize;
+}
+
+.child-idx-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.child-idx-arrows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.slice-editor-child-row:hover .child-idx-arrows {
+  opacity: 1;
+}
+
+.slice-editor-arrow-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s, background-color 0.2s;
+}
+
+.slice-editor-arrow-btn:hover:not(:disabled) {
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.slice-editor-arrow-btn:disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+}
+
+.child-idx {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 4px;
 }
 
 .slice-editor-clear:hover,

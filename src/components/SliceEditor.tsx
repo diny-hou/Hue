@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { File, Folder, Plus, X } from 'lucide-react';
+import { File, Folder, Plus, X, ArrowUp, ArrowDown } from 'lucide-react';
 
 export interface SliceItem {
     name: string;
@@ -31,6 +31,11 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
     const [pos, setPos] = useState({ x: position.x, y: position.y });
     const [isDragging, setIsDragging] = useState(false);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+    const [innerTab, setInnerTab] = useState<'main' | 'list'>(panelType === 'group' ? 'list' : 'main');
+
+    // Middle-drag sorting state
+    const [dragIndex, setDragIndex] = useState<number | null>(null);
 
     const [childrenList, setChildrenList] = useState<SliceItem[]>(() => {
         const initialChildren = [...(item.children || [])];
@@ -146,6 +151,64 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
         setChildrenList(newChildren);
     };
 
+    const handleChildMoveUp = (idx: number) => {
+        if (idx === 0) return;
+        const newChildren = [...childrenList];
+        const temp = newChildren[idx];
+        newChildren[idx] = newChildren[idx - 1];
+        newChildren[idx - 1] = temp;
+        setChildrenList(newChildren);
+    };
+
+    const handleChildMoveDown = (idx: number) => {
+        if (idx === childrenList.length - 1) return;
+        const newChildren = [...childrenList];
+        const temp = newChildren[idx];
+        newChildren[idx] = newChildren[idx + 1];
+        newChildren[idx + 1] = temp;
+        setChildrenList(newChildren);
+    };
+
+    const handleItemPointerDown = (e: React.PointerEvent<HTMLDivElement>, idx: number) => {
+        // Middle mouse button (1) means we start dragging to reorder
+        if (e.button === 1) {
+            e.preventDefault();
+            setDragIndex(idx);
+            (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        }
+    };
+
+    const handleItemPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (dragIndex === null) return;
+
+        // Find if we are hovering over another row
+        const elements = document.elementsFromPoint(e.clientX, e.clientY);
+        const hoveredRow = elements.find(el => el.classList.contains('slice-editor-child-row'));
+
+        if (hoveredRow) {
+            const hoverIndexStr = hoveredRow.getAttribute('data-index');
+            if (hoverIndexStr) {
+                const hoverIndex = parseInt(hoverIndexStr, 10);
+                if (hoverIndex !== dragIndex) {
+                    // Swap
+                    const newChildren = [...childrenList];
+                    const temp = newChildren[dragIndex];
+                    newChildren[dragIndex] = newChildren[hoverIndex];
+                    newChildren[hoverIndex] = temp;
+                    setChildrenList(newChildren);
+                    setDragIndex(hoverIndex); // update our tracking index
+                }
+            }
+        }
+    };
+
+    const handleItemPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (dragIndex !== null) {
+            setDragIndex(null);
+            (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+        }
+    };
+
     const handleClear = () => {
         setName('');
         setPath('');
@@ -252,13 +315,19 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
             <div className="slice-editor-type-toggle">
                 <button
                     className={`type-btn ${panelType === 'app' ? 'active' : ''}`}
-                    onClick={() => setPanelType('app')}
+                    onClick={() => {
+                        setPanelType('app');
+                        setInnerTab('main');
+                    }}
                 >
                     Application
                 </button>
                 <button
                     className={`type-btn ${panelType === 'group' ? 'active' : ''}`}
-                    onClick={() => setPanelType('group')}
+                    onClick={() => {
+                        setPanelType('group');
+                        setInnerTab('list');
+                    }}
                 >
                     Folder
                 </button>
@@ -270,8 +339,25 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
                 </button>
             </div>
 
+            {panelType === 'hybrid' && (
+                <div className="slice-editor-inner-tabs">
+                    <button
+                        className={`type-btn ${innerTab === 'main' ? 'active' : ''}`}
+                        onClick={() => setInnerTab('main')}
+                    >
+                        App Options
+                    </button>
+                    <button
+                        className={`type-btn ${innerTab === 'list' ? 'active' : ''}`}
+                        onClick={() => setInnerTab('list')}
+                    >
+                        Folder List
+                    </button>
+                </div>
+            )}
+
             <div className={`slice-editor-body ${panelType === 'hybrid' ? 'hybrid-layout' : ''}`}>
-                {(panelType === 'app' || panelType === 'hybrid') && (
+                {(panelType === 'app' || panelType === 'hybrid') && innerTab === 'main' && (
                     <div className="slice-editor-section">
                         <label className="slice-editor-label">Path / Command</label>
                         <div className="slice-editor-path-row">
@@ -353,7 +439,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
                     </div>
                 )}
 
-                {(panelType === 'group' || panelType === 'hybrid') && (
+                {(panelType === 'group' || panelType === 'hybrid') && innerTab === 'list' && (
                     <div className="slice-editor-section slice-editor-group-children">
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <label className="slice-editor-label">Group Items (8 Slots)</label>
@@ -364,13 +450,41 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
                                 disabled={loading}
                                 title="Auto-fill empty slots from files"
                             >
-                                {loading ? '…' : 'Auto-Fill Docs...'}
+                                {loading ? '…' : 'Auto'}
                             </button>
                         </div>
                         <div className="slice-editor-children-list">
                             {childrenList.map((child, idx) => (
-                                <div key={idx} className="slice-editor-child-row">
-                                    <span className="child-idx">{idx + 1}.</span>
+                                <div
+                                    key={idx}
+                                    className={`slice-editor-child-row ${dragIndex === idx ? 'dragging' : ''}`}
+                                    data-index={idx}
+                                    onPointerDown={(e) => handleItemPointerDown(e, idx)}
+                                    onPointerMove={handleItemPointerMove}
+                                    onPointerUp={handleItemPointerUp}
+                                    onPointerCancel={handleItemPointerUp}
+                                >
+                                    <div className="child-idx-controls">
+                                        <div className="child-idx-arrows">
+                                            <button
+                                                className="slice-editor-arrow-btn"
+                                                onClick={() => handleChildMoveUp(idx)}
+                                                disabled={idx === 0}
+                                                title="Move Up"
+                                            >
+                                                <ArrowUp size={10} />
+                                            </button>
+                                            <button
+                                                className="slice-editor-arrow-btn"
+                                                onClick={() => handleChildMoveDown(idx)}
+                                                disabled={idx === childrenList.length - 1}
+                                                title="Move Down"
+                                            >
+                                                <ArrowDown size={10} />
+                                            </button>
+                                        </div>
+                                        <span className="child-idx">{idx + 1}.</span>
+                                    </div>
                                     <div className="child-inputs">
                                         <input
                                             className="slice-editor-input"
