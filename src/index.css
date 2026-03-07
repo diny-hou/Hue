@@ -495,7 +495,34 @@ body {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
   z-index: 10;
   position: relative;
-  cursor: ns-resize;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.slice-editor-drag-handle {
+  cursor: grab;
+  color: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  margin-right: -4px;
+  margin-left: -2px;
+  border-radius: 4px;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.slice-editor-child-row:hover .slice-editor-drag-handle {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.slice-editor-drag-handle:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.slice-editor-child-row.dragging .slice-editor-drag-handle {
+  cursor: grabbing;
+  color: white;
 }
 
 .child-idx-controls {

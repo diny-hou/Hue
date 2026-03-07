@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { File, Folder, Plus, X, ArrowUp, ArrowDown } from 'lucide-react';
+import { File, Folder, Plus, X, ArrowUp, ArrowDown, GripVertical } from 'lucide-react';
 
 export interface SliceItem {
     name: string;
@@ -170,11 +170,11 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
     };
 
     const handleItemPointerDown = (e: React.PointerEvent<HTMLDivElement>, idx: number) => {
-        // Middle mouse button (1) means we start dragging to reorder
-        if (e.button === 1) {
+        // Only start drag if clicking the grip handle (left click)
+        if (e.button === 0 && (e.target as HTMLElement).closest('.slice-editor-drag-handle')) {
             e.preventDefault();
             setDragIndex(idx);
-            (e.target as HTMLElement).setPointerCapture(e.pointerId);
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
         }
     };
 
@@ -464,6 +464,9 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
                                     onPointerUp={handleItemPointerUp}
                                     onPointerCancel={handleItemPointerUp}
                                 >
+                                    <div className="slice-editor-drag-handle" title="Drag to reorder">
+                                        <GripVertical size={14} />
+                                    </div>
                                     <div className="child-idx-controls">
                                         <div className="child-idx-arrows">
                                             <button
