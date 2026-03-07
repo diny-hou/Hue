@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { File, Folder, Plus, X } from 'lucide-react';
 
 export interface SliceItem {
     name: string;
@@ -222,7 +223,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
                                 disabled={loading}
                                 title="Browse file…"
                             >
-                                {loading ? '…' : '📄'}
+                                {loading ? '…' : <File size={16} />}
                             </button>
                             <button
                                 className="slice-editor-browse"
@@ -230,7 +231,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
                                 disabled={loading}
                                 title="Browse folder…"
                             >
-                                {loading ? '…' : '📁'}
+                                {loading ? '…' : <Folder size={16} />}
                             </button>
                         </div>
 
@@ -241,7 +242,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
                                 onClick={() => setEnvList([...envList, { key: '', value: '' }])}
                                 title="Add Environment Variable"
                             >
-                                +
+                                <Plus size={14} />
                             </button>
                         </div>
                         <div className="slice-editor-env-list">
@@ -279,7 +280,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
                                         }}
                                         title="Remove"
                                     >
-                                        ×
+                                        <X size={14} />
                                     </button>
                                 </div>
                             ))}
@@ -316,7 +317,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
                                                 disabled={loading}
                                                 title="Browse file…"
                                             >
-                                                {loading ? '…' : '📄'}
+                                                {loading ? '…' : <File size={16} />}
                                             </button>
                                             <button
                                                 className="slice-editor-browse"
@@ -324,7 +325,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
                                                 disabled={loading}
                                                 title="Browse folder…"
                                             >
-                                                {loading ? '…' : '📁'}
+                                                {loading ? '…' : <Folder size={16} />}
                                             </button>
                                         </div>
                                     </div>
