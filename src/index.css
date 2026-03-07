@@ -122,8 +122,33 @@ body {
 .slice-path.active,
 .slice-path:hover {
   fill: var(--hover-color);
+  opacity: var(--hover-opacity, 1.0);
   filter: brightness(1.2);
   transform: scale(var(--hover-scale, 1.05));
+}
+
+/* Apply drag opacity to inactive slices when dragging */
+.pie-container.dragging .slice-path:not(:hover):not(.active) {
+  opacity: var(--drag-opacity, 0.3);
+  transition: opacity 0.2s ease;
+}
+
+/* Also apply drag opacity to outer slices when dragging and an inner slice is hovered */
+.pie-container.dragging .slice-group:has(.slice-path:hover)~.outer-ring .outer-slice,
+.pie-container.dragging .slice-group:has(.slice-path.active)~.outer-ring .outer-slice {
+  opacity: calc(var(--drag-opacity, 0.3) * 0.8);
+  transition: opacity 0.2s ease;
+}
+
+/* Sub-panel base opacity (different from inner) */
+.slice-path.outer-slice {
+  opacity: var(--sub-panel-opacity, 0.6);
+}
+
+/* Sub-panel hover opacity */
+.slice-path.outer-slice.active,
+.slice-path.outer-slice:hover {
+  opacity: var(--sub-panel-hover-opacity, 0.8);
 }
 
 /* ── Hover Animations ── */
@@ -214,14 +239,19 @@ body {
 /* Outer ring slices */
 .outer-slice {
   fill: var(--panel-color, rgba(15, 15, 25, 0.35));
-  opacity: calc(var(--panel-opacity, 0.8) - 0.2);
-  /* Slightly more transparent */
+  opacity: var(--sub-panel-opacity, 0.6);
   stroke: rgba(255, 255, 255, 0.08);
   stroke-width: 1;
 }
 
 .outer-slice.active {
   fill: rgba(99, 102, 241, 0.25);
+}
+
+/* Override text styles for outer ring labels */
+.slice-content.outer-label {
+  font-size: var(--sub-text-size, 12px);
+  color: var(--sub-text-color, white);
 }
 
 .outer-label {
@@ -268,7 +298,6 @@ body {
   padding: 16px 18px;
   min-width: 240px;
   max-height: 520px;
-  overflow-y: auto;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
   display: flex;
   flex-direction: column;
@@ -277,22 +306,22 @@ body {
   font-family: 'Inter', system-ui, sans-serif;
 }
 
-.slice-editor::-webkit-scrollbar {
+.slice-editor-body::-webkit-scrollbar {
   width: 6px;
 }
 
-.slice-editor::-webkit-scrollbar-track {
+.slice-editor-body::-webkit-scrollbar-track {
   background: transparent;
-  margin: 8px 0;
+  margin: 4px 0;
 }
 
-.slice-editor::-webkit-scrollbar-thumb {
+.slice-editor-body::-webkit-scrollbar-thumb {
   background: rgba(99, 102, 241, 0.35);
   border-radius: 3px;
   transition: background 0.2s;
 }
 
-.slice-editor::-webkit-scrollbar-thumb:hover {
+.slice-editor-body::-webkit-scrollbar-thumb:hover {
   background: rgba(99, 102, 241, 0.6);
 }
 
@@ -368,6 +397,9 @@ body {
 .slice-editor-body {
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 4px;
 }
 
 .slice-editor-group-children {
@@ -536,34 +568,39 @@ body {
   text-align: center;
 }
 
-.preferences-tabs {
+.pref-tabs {
   display: flex;
-  gap: 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  margin-bottom: 16px;
-  padding-bottom: 8px;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 6px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
-.preferences-tabs button {
+.pref-tabs button {
+  flex: 1;
   background: transparent;
   border: none;
   color: rgba(255, 255, 255, 0.5);
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: all 0.2s;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: center;
 }
 
-.preferences-tabs button:hover {
-  background: rgba(255, 255, 255, 0.05);
+.pref-tabs button:hover {
+  background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.8);
 }
 
-.preferences-tabs button.active {
+.pref-tabs button.active {
   color: white;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--accent-color, #4a90e2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 .preferences-body {
@@ -582,6 +619,85 @@ body {
 .pref-row label {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.7);
+}
+
+.pref-row input[type="number"],
+.pref-row input[type="text"] {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  padding: 6px 10px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.pref-row input[type="number"]:focus,
+.pref-row input[type="text"]:focus {
+  border-color: var(--accent-color);
+}
+
+/* For range inputs to look a bit better */
+.pref-row input[type="range"] {
+  accent-color: var(--accent-color);
+}
+
+.pref-row input[type="color"] {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  padding: 2px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.pref-row input[type="color"]:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.pref-row input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.pref-row input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+
+.pref-select {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  padding: 6px 30px 6px 10px;
+  outline: none;
+  transition: all 0.15s;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22rgba(255,255,255,0.7)%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px top 50%;
+  background-size: 10px auto;
+  min-width: 140px;
+}
+
+.pref-select:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.pref-select:focus {
+  border-color: var(--accent-color);
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.pref-select option {
+  background: #2a2a35;
+  color: #fff;
+  padding: 8px;
 }
 
 .pref-record-btn {

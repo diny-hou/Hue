@@ -10,6 +10,12 @@ export interface AppearanceConfig {
     animation_type: string;
     hover_scale: string;
     hover_animation?: string;
+    hover_opacity?: number;
+    sub_panel_opacity?: number;
+    drag_opacity?: number;
+    sub_panel_hover_opacity?: number;
+    sub_panel_text_size?: number;
+    sub_panel_text_color?: string;
 }
 
 export interface MenuConfig {
@@ -57,6 +63,7 @@ export const PieMenu: React.FC = () => {
     const [editingChildIndex, setEditingChildIndex] = useState<number | null>(null);
     const [editingPos, setEditingPos] = useState<{ x: number; y: number } | null>(null);
     const isEditorOpenRef = React.useRef(false);
+    const isPreferencesOpenRef = React.useRef(false);
     const hoveredIndexRef = React.useRef<number | null>(null);
 
     useEffect(() => {
@@ -80,7 +87,7 @@ export const PieMenu: React.FC = () => {
                         let name = path.split('\\').pop()?.split('/').pop() || 'App';
                         if (name.endsWith('.exe')) name = name.substring(0, name.length - 4);
                         newItems[hoveredIndexRef.current!] = { name, path, children: [] };
-                        const newConfig = configFull ? { ...configFull, items: newItems } : { global_shortcut: 'alt+space', appearance: { panel_opacity: 0.8, panel_color: '#333333', text_size: 14, text_color: '#ffffff', animation_type: 'spread', hover_scale: 'small', hover_animation: 'none' }, items: newItems };
+                        const newConfig = configFull ? { ...configFull, items: newItems } : { global_shortcut: 'alt+space', appearance: { panel_opacity: 0.8, panel_color: '#333333', text_size: 14, text_color: '#ffffff', animation_type: 'spread', hover_scale: 'small', hover_animation: 'none', hover_opacity: 1.0, sub_panel_opacity: 0.6, drag_opacity: 0.3, sub_panel_hover_opacity: 0.8, sub_panel_text_size: 12, sub_panel_text_color: '#ffffff' }, items: newItems };
                         invoke('update_config', { newConfig }).catch(console.error);
                         if (configFull) setConfigFull({ ...configFull, items: newItems });
                         return newItems;
@@ -97,7 +104,7 @@ export const PieMenu: React.FC = () => {
                 setIsVisible(true);
             });
             const l2 = listen('menu-hide', () => {
-                if (isEditorOpenRef.current) return;
+                if (isEditorOpenRef.current || isPreferencesOpenRef.current) return;
                 setIsVisible(false);
                 setIsDragging(false);
                 updateActiveIndex(null);
@@ -106,7 +113,7 @@ export const PieMenu: React.FC = () => {
             });
             // Also reset on focus loss
             const l3 = listen('tauri://blur', () => {
-                if (isEditorOpenRef.current) return;
+                if (isEditorOpenRef.current || isPreferencesOpenRef.current) return;
                 setIsVisible(false);
                 setIsDragging(false);
                 updateActiveIndex(null);
@@ -125,7 +132,13 @@ export const PieMenu: React.FC = () => {
                 setEditingIndex(null);
                 setEditingChildIndex(null);
             });
-            return Promise.all([l1, l2, l3, l4, l5]);
+            const l6 = listen('preferences-opened', () => {
+                isPreferencesOpenRef.current = true;
+            });
+            const l7 = listen('preferences-closed', () => {
+                isPreferencesOpenRef.current = false;
+            });
+            return Promise.all([l1, l2, l3, l4, l5, l6, l7]);
         });
 
         return () => {
@@ -338,6 +351,12 @@ export const PieMenu: React.FC = () => {
             '--text-size': `${appearance.text_size}px`,
             '--text-color': appearance.text_color,
             '--hover-scale': scaleVal,
+            '--hover-opacity': appearance.hover_opacity ?? 1.0,
+            '--sub-panel-opacity': appearance.sub_panel_opacity ?? 0.6,
+            '--drag-opacity': appearance.drag_opacity ?? 0.3,
+            '--sub-panel-hover-opacity': appearance.sub_panel_hover_opacity ?? 0.8,
+            '--sub-text-size': `${appearance.sub_panel_text_size ?? 12}px`,
+            '--sub-text-color': appearance.sub_panel_text_color ?? appearance.text_color ?? '#ffffff',
         } as React.CSSProperties;
     }, [configFull]);
 
@@ -513,6 +532,7 @@ export const PieMenu: React.FC = () => {
                 onContextMenu={e => {
                     e.preventDefault();
                     e.stopPropagation();
+                    isPreferencesOpenRef.current = true;
                     invoke('open_preferences_window').catch(console.error);
                 }}
                 title="Right-click for Preferences"
@@ -546,7 +566,7 @@ export const PieMenu: React.FC = () => {
                         }
 
                         setItems(newItems);
-                        const newConfig = configFull ? { ...configFull, items: newItems } : { global_shortcut: 'alt+space', appearance: { panel_opacity: 0.8, panel_color: '#333333', text_size: 14, text_color: '#ffffff', animation_type: 'spread', hover_scale: 'small', hover_animation: 'none' }, items: newItems };
+                        const newConfig = configFull ? { ...configFull, items: newItems } : { global_shortcut: 'alt+space', appearance: { panel_opacity: 0.8, panel_color: '#333333', text_size: 14, text_color: '#ffffff', animation_type: 'spread', hover_scale: 'small', hover_animation: 'none', hover_opacity: 1.0, sub_panel_opacity: 0.6, drag_opacity: 0.3, sub_panel_hover_opacity: 0.8, sub_panel_text_size: 12, sub_panel_text_color: '#ffffff' }, items: newItems };
                         invoke('update_config', { newConfig }).catch(console.error);
                         if (configFull) setConfigFull(newConfig);
                         setEditingIndex(null);

@@ -1,19 +1,23 @@
-use tauri::{Manager, Emitter, WebviewWindowBuilder};
-use std::process::Command;
 use crate::menu_logic::{self, MenuConfig};
+use std::process::Command;
+use tauri::{Emitter, Manager, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 
 #[tauri::command]
 pub fn launch_app(
-    app_handle: tauri::AppHandle, 
-    path: String, 
-    env: Option<std::collections::HashMap<String, String>>
+    app_handle: tauri::AppHandle,
+    path: String,
+    env: Option<std::collections::HashMap<String, String>>,
 ) {
     let clean_path = path.trim().trim_matches('"').trim_matches('\'');
     let p = std::path::Path::new(clean_path);
 
     // Determine launch strategy based on file extension
-    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    let ext = p
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
     let mut cmd = match ext.as_str() {
         "bat" | "cmd" => {
             let mut c = Command::new("cmd");
@@ -87,13 +91,28 @@ pub fn update_config(app_handle: tauri::AppHandle, new_config: MenuConfig) {
 pub fn open_preferences_window(app_handle: tauri::AppHandle) {
     if let Some(window) = app_handle.get_webview_window("preferences") {
         if let Some(main_window) = app_handle.get_webview_window("main") {
-            if let Ok(pos) = main_window.cursor_position() {
-                if let Ok(scale_factor) = main_window.scale_factor() {
-                    let new_x = pos.x as i32 + (20.0 * scale_factor) as i32;
-                    let new_y = pos.y as i32 - (300.0 * scale_factor) as i32;
-                    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x: new_x, y: new_y }));
+            // Position preferences to the right of the Hue circle, not overlapping
+            if let Ok(main_pos) = main_window.outer_position() {
+                if let Ok(main_size) = main_window.outer_size() {
+                    if let Ok(pref_size) = window.outer_size() {
+                        // Place at the right edge of the main window with a small gap
+                        let gap = 8_i32;
+                        let pref_x = main_pos.x + main_size.width as i32 / 2 + gap;
+                        // Vertically center the preferences window relative to the main window
+                        let pref_y =
+                            main_pos.y + (main_size.height as i32 - pref_size.height as i32) / 2;
+                        let _ = window.set_position(tauri::Position::Physical(
+                            tauri::PhysicalPosition {
+                                x: pref_x,
+                                y: pref_y,
+                            },
+                        ));
+                    }
                 }
             }
+            let _ = main_window.emit("preferences-opened", ());
+            // Keep main window visible so user can preview design changes
+            let _ = main_window.show();
         }
         let _ = window.show();
         let _ = window.set_focus();
@@ -104,6 +123,10 @@ pub fn open_preferences_window(app_handle: tauri::AppHandle) {
 pub fn close_preferences_window(app_handle: tauri::AppHandle) {
     if let Some(window) = app_handle.get_webview_window("preferences") {
         let _ = window.hide();
+    }
+    if let Some(main) = app_handle.get_webview_window("main") {
+        let _ = main.emit("preferences-closed", ());
+        let _ = main.hide(); // Hide main menu as well when done
     }
 }
 
@@ -138,17 +161,14 @@ pub async fn pick_file(app_handle: tauri::AppHandle) -> Option<String> {
 
 #[tauri::command]
 pub async fn pick_folder(app_handle: tauri::AppHandle) -> Option<String> {
-    let folder = app_handle
-        .dialog()
-        .file()
-        .blocking_pick_folder();
+    let folder = app_handle.dialog().file().blocking_pick_folder();
     folder.and_then(|f| f.as_path().map(|p| p.to_string_lossy().into_owned()))
 }
 
 #[tauri::command]
 pub fn update_shortcut(app_handle: tauri::AppHandle, new_shortcut: String) -> Result<(), String> {
-    use std::sync::Mutex;
     use std::str::FromStr;
+    use std::sync::Mutex;
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
     // 1. Get current shortcut string from state

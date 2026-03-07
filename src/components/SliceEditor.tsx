@@ -28,10 +28,10 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
 
     const [childrenList, setChildrenList] = useState<SliceItem[]>(() => {
         const initialChildren = [...(item.children || [])];
-        while (initialChildren.length < 3) {
+        while (initialChildren.length < 8) {
             initialChildren.push({ name: '', path: '', children: [] });
         }
-        return initialChildren.slice(0, 3);
+        return initialChildren.slice(0, 8);
     });
 
     const [path, setPath] = useState(item.path);
@@ -289,7 +289,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
 
                 {(panelType === 'group' || panelType === 'hybrid') && (
                     <div className="slice-editor-section slice-editor-group-children">
-                        <label className="slice-editor-label">Group Items (3 Slots)</label>
+                        <label className="slice-editor-label">Group Items (8 Slots)</label>
                         <div className="slice-editor-children-list">
                             {childrenList.map((child, idx) => (
                                 <div key={idx} className="slice-editor-child-row">

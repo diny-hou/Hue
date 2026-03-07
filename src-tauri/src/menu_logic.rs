@@ -13,10 +13,46 @@ pub struct AppearanceConfig {
     pub hover_scale: String,    // "none", "small", "medium", "large"
     #[serde(default = "default_hover_animation")]
     pub hover_animation: String, // "none", "jiggle", "pulse", "glow"
+    #[serde(default = "default_hover_opacity")]
+    pub hover_opacity: f32,
+    #[serde(default = "default_sub_panel_opacity")]
+    pub sub_panel_opacity: f32,
+    #[serde(default = "default_drag_opacity")]
+    pub drag_opacity: f32,
+    #[serde(default = "default_sub_panel_hover_opacity")]
+    pub sub_panel_hover_opacity: f32,
+    #[serde(default = "default_sub_panel_text_size")]
+    pub sub_panel_text_size: f32,
+    #[serde(default = "default_text_color")]
+    pub sub_panel_text_color: String,
 }
 
 fn default_hover_animation() -> String {
     "none".to_string()
+}
+
+fn default_hover_opacity() -> f32 {
+    1.0
+}
+
+fn default_sub_panel_opacity() -> f32 {
+    0.6 // Slightly lower than main panel default
+}
+
+fn default_drag_opacity() -> f32 {
+    0.3 // Default opacity for inactive slices while dragging
+}
+
+fn default_sub_panel_hover_opacity() -> f32 {
+    0.8 // Opacity when hovering a sub-panel slice
+}
+
+fn default_sub_panel_text_size() -> f32 {
+    12.0
+}
+
+fn default_text_color() -> String {
+    "#ffffff".to_string()
 }
 
 impl Default for AppearanceConfig {
@@ -29,6 +65,12 @@ impl Default for AppearanceConfig {
             animation_type: "spread".to_string(),
             hover_scale: "small".to_string(),
             hover_animation: default_hover_animation(),
+            hover_opacity: default_hover_opacity(),
+            sub_panel_opacity: default_sub_panel_opacity(),
+            drag_opacity: default_drag_opacity(),
+            sub_panel_hover_opacity: default_sub_panel_hover_opacity(),
+            sub_panel_text_size: default_sub_panel_text_size(),
+            sub_panel_text_color: default_text_color(),
         }
     }
 }

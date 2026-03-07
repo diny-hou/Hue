@@ -37,14 +37,20 @@ interface PreferencesProps {
 }
 
 export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSaved }) => {
-    const [activeTab, setActiveTab] = useState<'general' | 'appearance'>('general');
+    const [activeTab, setActiveTab] = useState<'general' | 'theme' | 'opacity' | 'animations' | 'advanced'>('general');
     const [shortcut, setShortcut] = useState(config.global_shortcut || 'alt+space');
 
     // Appearance state
     const [opacity, setOpacity] = useState(config.appearance?.panel_opacity ?? 0.8);
+    const [hoverOpacity, setHoverOpacity] = useState(config.appearance?.hover_opacity ?? 1.0);
+    const [subPanelOpacity, setSubPanelOpacity] = useState(config.appearance?.sub_panel_opacity ?? 0.6);
+    const [subPanelHoverOpacity, setSubPanelHoverOpacity] = useState(config.appearance?.sub_panel_hover_opacity ?? 0.8);
+    const [dragOpacity, setDragOpacity] = useState(config.appearance?.drag_opacity ?? 0.3);
     const [panelColor, setPanelColor] = useState(config.appearance?.panel_color ?? '#333333');
     const [textSize, setTextSize] = useState(config.appearance?.text_size ?? 14);
     const [textColor, setTextColor] = useState(config.appearance?.text_color ?? '#ffffff');
+    const [subPanelTextSize, setSubPanelTextSize] = useState(config.appearance?.sub_panel_text_size ?? 12);
+    const [subPanelTextColor, setSubPanelTextColor] = useState(config.appearance?.sub_panel_text_color ?? '#ffffff');
     const [animType, setAnimType] = useState(config.appearance?.animation_type ?? 'spread');
     const [hoverScale, setHoverScale] = useState(config.appearance?.hover_scale ?? 'small');
     const [hoverAnim, setHoverAnim] = useState(config.appearance?.hover_animation || 'none');
@@ -101,9 +107,15 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                 global_shortcut: shortcut,
                 appearance: {
                     panel_opacity: opacity,
+                    hover_opacity: hoverOpacity,
+                    sub_panel_opacity: subPanelOpacity,
+                    sub_panel_hover_opacity: subPanelHoverOpacity,
+                    drag_opacity: dragOpacity,
                     panel_color: panelColor,
                     text_size: textSize,
                     text_color: textColor,
+                    sub_panel_text_size: subPanelTextSize,
+                    sub_panel_text_color: subPanelTextColor,
                     animation_type: animType,
                     hover_scale: hoverScale,
                     hover_animation: hoverAnim,
@@ -143,22 +155,30 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                 Hue Preferences
             </div>
 
-            <div className="preferences-tabs">
+            <div className="pref-tabs">
                 <button
                     className={activeTab === 'general' ? 'active' : ''}
                     onClick={() => setActiveTab('general')}
-                >
-                    General
-                </button>
+                >General</button>
                 <button
-                    className={activeTab === 'appearance' ? 'active' : ''}
-                    onClick={() => setActiveTab('appearance')}
-                >
-                    Appearance
-                </button>
+                    className={activeTab === 'theme' ? 'active' : ''}
+                    onClick={() => setActiveTab('theme')}
+                >Theme</button>
+                <button
+                    className={activeTab === 'opacity' ? 'active' : ''}
+                    onClick={() => setActiveTab('opacity')}
+                >Opacity</button>
+                <button
+                    className={activeTab === 'animations' ? 'active' : ''}
+                    onClick={() => setActiveTab('animations')}
+                >Animations</button>
+                <button
+                    className={activeTab === 'advanced' ? 'active' : ''}
+                    onClick={() => setActiveTab('advanced')}
+                >Advanced</button>
             </div>
 
-            <div className="preferences-body">
+            <div className="pref-tab-content">
                 {activeTab === 'general' && (
                     <>
                         <div className="pref-row">
@@ -171,6 +191,11 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                     {isRecording ? 'Listening...' : shortcut}
                                 </button>
                             </div>
+                        </div>
+                        <div className="pref-row" style={{ marginTop: '8px' }}>
+                            <small style={{ color: '#aaa' }}>
+                                <em>Note: Changes to shortcut take effect immediately upon saving.</em>
+                            </small>
                         </div>
                         <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
                             <label style={{ color: '#ff6b6b' }}>Danger Zone</label>
@@ -196,10 +221,10 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                     </>
                 )}
 
-                {activeTab === 'appearance' && (
+                {activeTab === 'theme' && (
                     <>
                         <div className="pref-row">
-                            <label>Background Color</label>
+                            <label>Panel Color</label>
                             <input
                                 type="color"
                                 value={panelColor}
@@ -207,7 +232,59 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                             />
                         </div>
                         <div className="pref-row">
-                            <label>Panel Opacity</label>
+                            <label>Text Color</label>
+                            <input
+                                type="color"
+                                value={textColor}
+                                onChange={(e) => setTextColor(e.target.value)}
+                            />
+                        </div>
+                        <div className="pref-row">
+                            <label>Text Size</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                    type="range"
+                                    min="10"
+                                    max="24"
+                                    step="1"
+                                    value={textSize}
+                                    onChange={(e) => setTextSize(parseInt(e.target.value))}
+                                />
+                                <span style={{ fontSize: '12px', minWidth: '3ch' }}>{textSize}px</span>
+                            </div>
+                        </div>
+                        <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
+                            <label style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>Sub-panel Text</label>
+                        </div>
+                        <div className="pref-row">
+                            <label>Text Color</label>
+                            <input
+                                type="color"
+                                value={subPanelTextColor}
+                                onChange={(e) => setSubPanelTextColor(e.target.value)}
+                            />
+                        </div>
+                        <div className="pref-row">
+                            <label>Text Size</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                    type="range"
+                                    min="8"
+                                    max="20"
+                                    step="1"
+                                    value={subPanelTextSize}
+                                    onChange={(e) => setSubPanelTextSize(parseInt(e.target.value))}
+                                />
+                                <span style={{ fontSize: '12px', minWidth: '3ch' }}>{subPanelTextSize}px</span>
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {activeTab === 'opacity' && (
+                    <>
+                        <div className="pref-row">
+                            <label>Panel Opacity (Main)</label>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <input
                                     type="range"
@@ -221,36 +298,78 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                             </div>
                         </div>
                         <div className="pref-row">
-                            <label>Text Color</label>
-                            <input
-                                type="color"
-                                value={textColor}
-                                onChange={(e) => setTextColor(e.target.value)}
-                            />
+                            <label>Panel Opacity (Sub)</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                    type="range"
+                                    min="0.1"
+                                    max="1.0"
+                                    step="0.05"
+                                    value={subPanelOpacity}
+                                    onChange={(e) => setSubPanelOpacity(parseFloat(e.target.value))}
+                                />
+                                <span style={{ fontSize: '12px', minWidth: '3ch' }}>{Math.round(subPanelOpacity * 100)}%</span>
+                            </div>
                         </div>
                         <div className="pref-row">
-                            <label>Text Size</label>
-                            <input
-                                type="number"
-                                min="8"
-                                max="32"
-                                value={textSize}
-                                onChange={(e) => setTextSize(parseInt(e.target.value, 10) || 14)}
-                                style={{ width: '60px' }}
-                            />
+                            <label>Hover Opacity</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                    type="range"
+                                    min="0.1"
+                                    max="1.0"
+                                    step="0.05"
+                                    value={hoverOpacity}
+                                    onChange={(e) => setHoverOpacity(parseFloat(e.target.value))}
+                                />
+                                <span style={{ fontSize: '12px', minWidth: '3ch' }}>{Math.round(hoverOpacity * 100)}%</span>
+                            </div>
                         </div>
+                        <div className="pref-row">
+                            <label>Sub-panel Hover Opacity</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                    type="range"
+                                    min="0.1"
+                                    max="1.0"
+                                    step="0.05"
+                                    value={subPanelHoverOpacity}
+                                    onChange={(e) => setSubPanelHoverOpacity(parseFloat(e.target.value))}
+                                />
+                                <span style={{ fontSize: '12px', minWidth: '3ch' }}>{Math.round(subPanelHoverOpacity * 100)}%</span>
+                            </div>
+                        </div>
+                        <div className="pref-row">
+                            <label>Drag Opacity</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                                <input
+                                    type="range"
+                                    min="0.1"
+                                    max="1.0"
+                                    step="0.05"
+                                    style={{ flex: 1 }}
+                                    value={dragOpacity}
+                                    onChange={(e) => setDragOpacity(parseFloat(e.target.value))}
+                                />
+                                <span style={{ fontSize: '12px', minWidth: '3ch' }}>{Math.round(dragOpacity * 100)}%</span>
+                            </div>
+                        </div>
+                        <div className="pref-row" style={{ marginTop: '0px' }}>
+                            <small style={{ color: '#aaa', marginLeft: 'auto', display: 'block', textAlign: 'right', fontSize: '11px' }}>
+                                (Inactive during marking drag)
+                            </small>
+                        </div>
+                    </>
+                )}
+
+                {activeTab === 'animations' && (
+                    <>
                         <div className="pref-row">
                             <label>Open Animation</label>
                             <select
+                                className="pref-select"
                                 value={animType}
                                 onChange={(e) => setAnimType(e.target.value)}
-                                style={{
-                                    background: 'rgba(255, 255, 255, 0.1)',
-                                    color: 'white',
-                                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                                    padding: '4px',
-                                    borderRadius: '4px'
-                                }}
                             >
                                 <option value="none">None (Instant)</option>
                                 <option value="spread">Spread</option>
@@ -261,15 +380,9 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         <div className="pref-row">
                             <label>Hover Scale</label>
                             <select
+                                className="pref-select"
                                 value={hoverScale}
                                 onChange={(e) => setHoverScale(e.target.value)}
-                                style={{
-                                    background: 'rgba(255, 255, 255, 0.1)',
-                                    color: 'white',
-                                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                                    padding: '4px',
-                                    borderRadius: '4px'
-                                }}
                             >
                                 <option value="none">None (1.0x)</option>
                                 <option value="small">Small (1.05x)</option>
@@ -280,15 +393,9 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         <div className="pref-row">
                             <label>Hover Animation</label>
                             <select
+                                className="pref-select"
                                 value={hoverAnim}
                                 onChange={(e) => setHoverAnim(e.target.value)}
-                                style={{
-                                    background: 'rgba(255, 255, 255, 0.1)',
-                                    color: 'white',
-                                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                                    padding: '4px',
-                                    borderRadius: '4px'
-                                }}
                             >
                                 <option value="none">None</option>
                                 <option value="pulse">Pulse</option>
@@ -308,6 +415,6 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                     Close
                 </button>
             </div>
-        </div>
+        </div >
     );
 };
