@@ -160,6 +160,24 @@ pub async fn pick_file(app_handle: tauri::AppHandle) -> Option<String> {
 }
 
 #[tauri::command]
+pub async fn pick_files(app_handle: tauri::AppHandle) -> Vec<String> {
+    let files = app_handle
+        .dialog()
+        .file()
+        .add_filter("All Files", &["*"])
+        .add_filter("Executables", &["exe", "bat", "cmd", "lnk", "ps1"])
+        .blocking_pick_files();
+
+    match files {
+        Some(file_paths) => file_paths
+            .into_iter()
+            .filter_map(|fp| fp.as_path().map(|p| p.to_string_lossy().into_owned()))
+            .collect(),
+        None => vec![],
+    }
+}
+
+#[tauri::command]
 pub async fn pick_folder(app_handle: tauri::AppHandle) -> Option<String> {
     let folder = app_handle.dialog().file().blocking_pick_folder();
     folder.and_then(|f| f.as_path().map(|p| p.to_string_lossy().into_owned()))

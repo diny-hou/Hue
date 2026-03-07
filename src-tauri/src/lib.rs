@@ -36,6 +36,7 @@ pub fn run() {
             commands::get_config,
             commands::update_config,
             commands::pick_file,
+            commands::pick_files,
             commands::pick_folder,
             commands::update_shortcut,
             commands::open_preferences_window,

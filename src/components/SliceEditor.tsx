@@ -27,6 +27,11 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
         isInitialHybrid ? 'hybrid' : (isInitialGroup ? 'group' : 'app')
     );
 
+    // Initial position from props, then updated by drag
+    const [pos, setPos] = useState({ x: position.x, y: position.y });
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
     const [childrenList, setChildrenList] = useState<SliceItem[]>(() => {
         const initialChildren = [...(item.children || [])];
         while (initialChildren.length < 8) {
@@ -109,6 +114,32 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
         }
     };
 
+    const handleAutoFillFiles = async () => {
+        setLoading(true);
+        try {
+            const pickedFiles = await invoke<string[]>('pick_files');
+            if (pickedFiles && pickedFiles.length > 0) {
+                const newChildren = [...childrenList];
+                let fileIdx = 0;
+
+                // Find empty slots and fill them
+                for (let i = 0; i < newChildren.length && fileIdx < pickedFiles.length; i++) {
+                    if (!newChildren[i].path && !newChildren[i].name) {
+                        const path = pickedFiles[fileIdx];
+                        newChildren[i].path = path;
+                        let auto = path.split('\\').pop()?.split('/').pop() || '';
+                        if (auto.includes('.')) auto = auto.replace(/\.[^.]+$/, '');
+                        newChildren[i].name = auto;
+                        fileIdx++;
+                    }
+                }
+                setChildrenList(newChildren);
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleChildChange = (idx: number, field: 'name' | 'path', value: string) => {
         const newChildren = [...childrenList];
         newChildren[idx] = { ...newChildren[idx], [field]: value };
@@ -158,9 +189,35 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
         e.stopPropagation(); // prevent pie menu events
     };
 
+    // Drag handlers
+    const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+        setIsDragging(true);
+        setDragOffset({
+            x: e.clientX - pos.x,
+            y: e.clientY - pos.y
+        });
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        e.stopPropagation();
+    };
+
+    const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (!isDragging) return;
+        setPos({
+            x: e.clientX - dragOffset.x,
+            y: e.clientY - dragOffset.y
+        });
+        e.stopPropagation();
+    };
+
+    const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+        setIsDragging(false);
+        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+        e.stopPropagation();
+    };
+
     const style: React.CSSProperties = {
-        left: `${position.x}px`,
-        top: `${position.y}px`
+        left: `${pos.x}px`,
+        top: `${pos.y}px`
     };
 
     return (
@@ -172,7 +229,15 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
             onContextMenu={e => e.preventDefault()}
             onKeyDown={handleKeyDown}
         >
-            <div className="slice-editor-title" data-tauri-drag-region>Edit Panel</div>
+            <div
+                className="slice-editor-title"
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerUp}
+            >
+                Edit Panel
+            </div>
 
             <label className="slice-editor-label">Label</label>
             <input
@@ -290,7 +355,18 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({ item, position, onSave
 
                 {(panelType === 'group' || panelType === 'hybrid') && (
                     <div className="slice-editor-section slice-editor-group-children">
-                        <label className="slice-editor-label">Group Items (8 Slots)</label>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <label className="slice-editor-label">Group Items (8 Slots)</label>
+                            <button
+                                className="slice-editor-browse"
+                                style={{ fontSize: '11px', padding: '4px 8px', borderRadius: '4px' }}
+                                onClick={handleAutoFillFiles}
+                                disabled={loading}
+                                title="Auto-fill empty slots from files"
+                            >
+                                {loading ? '…' : 'Auto-Fill Docs...'}
+                            </button>
+                        </div>
                         <div className="slice-editor-children-list">
                             {childrenList.map((child, idx) => (
                                 <div key={idx} className="slice-editor-child-row">

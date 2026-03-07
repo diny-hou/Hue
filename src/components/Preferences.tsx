@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { MenuConfig } from './PieMenu'; // Will export MenuConfig from PieMenu.tsx shortly
 
 export const StandalonePreferences: React.FC = () => {
@@ -151,7 +152,15 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
             className="preferences-modal"
             onContextMenu={e => e.preventDefault()}
         >
-            <div data-tauri-drag-region className="preferences-header">
+            <div
+                className="preferences-header"
+                onPointerDown={(e) => {
+                    if (e.button === 0) {
+                        getCurrentWindow().startDragging()
+                            .catch(err => console.error("Failed to drag window:", err));
+                    }
+                }}
+            >
                 Hue Preferences
             </div>
 
