@@ -6,6 +6,10 @@ mod menu_logic;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--minimized"]),
+        ))
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {
             // A second instance was started - it will exit automatically.
             // We could also focus the existing window here if desired.
@@ -28,6 +32,27 @@ pub fn run() {
                 let _ = window.set_shadow(false);
             }
 
+            use tauri::{
+                menu::{Menu, MenuItem},
+                tray::TrayIconBuilder,
+            };
+
+            let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let pref_i = MenuItem::with_id(app, "preferences", "Preferences", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&pref_i, &quit_i])?;
+
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .on_menu_event(|app: &tauri::AppHandle, event| match event.id.as_ref() {
+                    "quit" => app.exit(0),
+                    "preferences" => {
+                        let _ = commands::open_preferences_window(app.clone());
+                    }
+                    _ => {}
+                })
+                .build(app)?;
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -43,6 +68,12 @@ pub fn run() {
             commands::close_preferences_window,
             commands::empty_all_slices
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

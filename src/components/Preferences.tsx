@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { isEnabled, enable, disable } from '@tauri-apps/plugin-autostart';
 import { MenuConfig } from './PieMenu'; // Will export MenuConfig from PieMenu.tsx shortly
 
 export const StandalonePreferences: React.FC = () => {
@@ -58,6 +59,27 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
 
     const [isRecording, setIsRecording] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [autoStart, setAutoStart] = useState(false);
+
+    useEffect(() => {
+        isEnabled()
+            .then(setAutoStart)
+            .catch(err => console.error("Failed to check autostart status:", err));
+    }, []);
+
+    const handleToggleAutoStart = async () => {
+        try {
+            if (autoStart) {
+                await disable();
+                setAutoStart(false);
+            } else {
+                await enable();
+                setAutoStart(true);
+            }
+        } catch (e) {
+            console.error("Failed to toggle autostart:", e);
+        }
+    };
 
     useEffect(() => {
         if (!isRecording) return;
@@ -205,6 +227,17 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                             <small style={{ color: '#aaa' }}>
                                 <em>Note: Changes to shortcut take effect immediately upon saving.</em>
                             </small>
+                        </div>
+                        <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
+                            <label>Run on System Startup</label>
+                            <label className="toggle-switch">
+                                <input
+                                    type="checkbox"
+                                    checked={autoStart}
+                                    onChange={handleToggleAutoStart}
+                                />
+                                <span className="slider round"></span>
+                            </label>
                         </div>
                         <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
                             <label style={{ color: '#ff6b6b' }}>Danger Zone</label>

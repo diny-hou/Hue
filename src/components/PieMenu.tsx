@@ -65,6 +65,8 @@ export const PieMenu: React.FC = () => {
     const isEditorOpenRef = React.useRef(false);
     const isPreferencesOpenRef = React.useRef(false);
     const hoveredIndexRef = React.useRef<number | null>(null);
+    const isParentLockedRef = React.useRef(false);
+    const lastDistanceRef = React.useRef(0);
 
     useEffect(() => {
         invoke<MenuConfig>('get_config')
@@ -116,6 +118,7 @@ export const PieMenu: React.FC = () => {
                 if (isEditorOpenRef.current || isPreferencesOpenRef.current) return;
                 setIsVisible(false);
                 setIsDragging(false);
+                isParentLockedRef.current = false;
                 updateActiveIndex(null);
                 setActiveChildIndex(null);
             });
@@ -186,6 +189,7 @@ export const PieMenu: React.FC = () => {
         if (e.button !== 0) return; // Only left-click
         if (isEditorOpenRef.current) return;
         setIsDragging(true);
+        isParentLockedRef.current = false; // Reset lock on new drag
         handlePointerMove(e); // Initialize angle calculation immediately if dragging starts off-center
     };
 
@@ -201,10 +205,15 @@ export const PieMenu: React.FC = () => {
         const dx = e.clientX - rect.left - center;
         const dy = e.clientY - rect.top - center;
         const distance = Math.sqrt(dx * dx + dy * dy);
+        lastDistanceRef.current = distance;
 
         // Intentionally require a minimum movement radius (e.g. 40px) to prevent accidental selection
+        // Do NOT unlock the parent if we cross the center! This allows UP -> CENTER -> DOWN gestures.
         if (distance < 40) {
-            updateActiveIndex(null);
+            if (!isParentLockedRef.current) {
+                updateActiveIndex(null);
+            }
+            setActiveChildIndex(null);
             return;
         }
 
@@ -217,16 +226,33 @@ export const PieMenu: React.FC = () => {
         // Adjust for the visual -90deg rotation in CSS
         angleDeg = (angleDeg + 90 + 360) % 360;
 
-        // Determine which slice this angle falls into
-        const adjusted = (angleDeg + halfSlice) % 360;
-        const mainIndex = Math.floor(adjusted / sliceAngle);
-
-        // Sub-menu logic
+        // Sub-menu logic (is the current active index a group folder?)
         const isActiveGroup = activeIndex !== null && (!items[activeIndex]?.path || (items[activeIndex]?.children?.length ?? 0) > 0);
 
-        if (isActiveGroup) {
-            // Check if mouse is in the outer child ring area
-            if (distance >= innerRadius && distance <= childOuterRadius) {
+        // Calculate theoretical main index if we weren't locked
+        const adjusted = (angleDeg + halfSlice) % 360;
+        const potentialMainIndex = Math.floor(adjusted / sliceAngle);
+
+        if (!isParentLockedRef.current) {
+            // We are not locked to a parent sub-menu yet
+            if (potentialMainIndex >= 0 && potentialMainIndex < items.length) {
+                updateActiveIndex(potentialMainIndex);
+            }
+
+            // If the user crosses the inner threshold into a group slice, lock it!
+            if (isActiveGroup && distance >= innerRadius) {
+                isParentLockedRef.current = true;
+            }
+        }
+
+        // If locked (or just entered the locking threshold), ONLY process child ring interactions
+        if (isParentLockedRef.current) {
+            // For Hybrid group (has path and children), require distance > 140 to select a child.
+            // For pure Folder (children only), we only need to pass the dead zone (distance > 70).
+            const hasPath = activeIndex !== null ? !!items[activeIndex]?.path : false;
+            const childThreshold = hasPath ? 140 : 70;
+
+            if (distance >= childThreshold) {
                 // Full circular sub-menu mapping (8 directions)
                 const childAdjusted = (angleDeg + childHalfSlice) % 360;
                 const childIndex = Math.floor(childAdjusted / childSliceAngle);
@@ -236,16 +262,9 @@ export const PieMenu: React.FC = () => {
                 } else {
                     setActiveChildIndex(null);
                 }
-            } else if (distance < innerRadius || distance > childOuterRadius) {
-                // Move back to main circle logic if within inner radii or far outside
-                if (mainIndex >= 0 && mainIndex < items.length && mainIndex !== activeIndex) {
-                    updateActiveIndex(mainIndex);
-                }
-            }
-        } else {
-            // Normal main menu hover
-            if (mainIndex >= 0 && mainIndex < items.length) {
-                updateActiveIndex(mainIndex);
+            } else {
+                // Inside parent ring but hasn't reached child threshold
+                setActiveChildIndex(null);
             }
         }
     };
@@ -255,11 +274,15 @@ export const PieMenu: React.FC = () => {
         if (!isDragging) return;
         if (isEditorOpenRef.current) return;
         setIsDragging(false);
+        isParentLockedRef.current = false; // Reset lock on release
 
         if (activeIndex !== null) {
             const currentItem = configRef.current[activeIndex];
 
-            if (activeChildIndex !== null && currentItem.children && currentItem.children.length > activeChildIndex) {
+            // If user releases the mouse in the center dead zone, cancel the interaction entirely.
+            if (lastDistanceRef.current < 40) {
+                // Canceled
+            } else if (activeChildIndex !== null && currentItem.children && currentItem.children.length > activeChildIndex) {
                 const childItem = currentItem.children[activeChildIndex];
                 // Only launch if the child actually has a path configured
                 if (childItem.path) {
