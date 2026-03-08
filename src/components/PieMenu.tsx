@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { SliceEditor, SliceItem } from './SliceEditor';
 
 export interface AppearanceConfig {
@@ -67,6 +68,7 @@ export const PieMenu: React.FC = () => {
     const hoveredIndexRef = React.useRef<number | null>(null);
     const isParentLockedRef = React.useRef(false);
     const lastDistanceRef = React.useRef(0);
+    const lastShowTimeRef = React.useRef(0);
 
     useEffect(() => {
         invoke<MenuConfig>('get_config')
@@ -76,10 +78,10 @@ export const PieMenu: React.FC = () => {
             })
             .catch(console.error);
 
-        let unlistenDrag: () => void;
-        let unlistenFile: () => void;
+        let unlistenDrag: UnlistenFn;
+        let unlistenFile: UnlistenFn;
 
-        import('@tauri-apps/api/event').then(({ listen }) => {
+        const setupDropListeners = async () => {
             const handleDrop = (event: any) => {
                 const paths = event.payload?.paths || event.payload;
                 if (Array.isArray(paths) && paths.length > 0 && hoveredIndexRef.current !== null) {
@@ -97,24 +99,32 @@ export const PieMenu: React.FC = () => {
                 }
             };
 
-            listen('tauri://drag-drop', handleDrop).then(f => unlistenDrag = f as any);
-            listen('tauri://file-drop', handleDrop).then(f => unlistenFile = f as any);
-        });
+            unlistenDrag = await listen('tauri://drag-drop', handleDrop);
+            unlistenFile = await listen('tauri://file-drop', handleDrop);
+        };
+        setupDropListeners();
 
-        const unlistenVisibility = import('@tauri-apps/api/event').then(({ listen }) => {
-            const l1 = listen('menu-show', () => {
+        const unlistenVisibility = (async () => {
+            const l1 = await listen('menu-show', () => {
                 setIsVisible(true);
+                lastShowTimeRef.current = Date.now();
             });
-            const l2 = listen('menu-hide', () => {
+            const l2 = await listen('menu-hide', () => {
                 if (isEditorOpenRef.current || isPreferencesOpenRef.current) return;
                 setIsVisible(false);
                 setIsDragging(false);
+                isParentLockedRef.current = false;
                 updateActiveIndex(null);
                 setActiveChildIndex(null);
                 invoke('hide_menu').catch(console.error);
             });
             // Also reset on focus loss
-            const l3 = listen('tauri://blur', () => {
+            const l3 = await listen('tauri://blur', () => {
+                // Focus guard: ignore blur events that happen immediately after show
+                // to prevent flicker on first startup or OS focus quirks.
+                if (Date.now() - lastShowTimeRef.current < 500) {
+                    return;
+                }
                 if (isEditorOpenRef.current || isPreferencesOpenRef.current) return;
                 setIsVisible(false);
                 setIsDragging(false);
@@ -122,7 +132,7 @@ export const PieMenu: React.FC = () => {
                 updateActiveIndex(null);
                 setActiveChildIndex(null);
             });
-            const l4 = listen('reload-config', () => {
+            const l4 = await listen('reload-config', () => {
                 invoke<MenuConfig>('get_config')
                     .then(config => {
                         setItems(config.items);
@@ -130,19 +140,19 @@ export const PieMenu: React.FC = () => {
                     })
                     .catch(console.error);
             });
-            const l5 = listen('editor-closed', () => {
+            const l5 = await listen('editor-closed', () => {
                 isEditorOpenRef.current = false;
                 setEditingIndex(null);
                 setEditingChildIndex(null);
             });
-            const l6 = listen('preferences-opened', () => {
+            const l6 = await listen('preferences-opened', () => {
                 isPreferencesOpenRef.current = true;
             });
-            const l7 = listen('preferences-closed', () => {
+            const l7 = await listen('preferences-closed', () => {
                 isPreferencesOpenRef.current = false;
             });
-            return Promise.all([l1, l2, l3, l4, l5, l6, l7]);
-        });
+            return [l1, l2, l3, l4, l5, l6, l7];
+        })();
 
         return () => {
             if (unlistenDrag) unlistenDrag();

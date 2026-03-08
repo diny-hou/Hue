@@ -109,9 +109,9 @@ pub fn register_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) {
                             };
                             let _ = window.set_position(tauri::Position::Physical(new_pos));
                         }
-                        let _ = window.emit("menu-show", ());
                         let _ = window.show();
                         let _ = window.set_focus();
+                        let _ = window.emit("menu-show", ());
                     }
                 } else if event.state() == ShortcutState::Released {
                     let _ = window.emit("menu-hide", ());

@@ -5,27 +5,15 @@ import { StandalonePreferences } from './components/Preferences';
 import './index.css';
 
 function App() {
-  const [route, setRoute] = useState<'main' | 'preferences' | 'loading'>('loading');
-
-  useEffect(() => {
+  const [route] = useState<'main' | 'preferences'>(() => {
     try {
       const label = getCurrentWindow().label;
-      console.log("Window Label detected as:", label);
-      if (label === 'preferences') {
-        setRoute('preferences');
-      } else {
-        setRoute('main');
-      }
+      return label === 'preferences' ? 'preferences' : 'main';
     } catch (e) {
       console.error("Failed to get window label", e);
-      // Fallback to URL in case Tauri API fails
-      if (window.location.href.includes('preferences')) {
-        setRoute('preferences');
-      } else {
-        setRoute('main');
-      }
+      return window.location.href.includes('preferences') ? 'preferences' : 'main';
     }
-  }, []);
+  });
 
   // Prevent default context menu
   useEffect(() => {
@@ -37,9 +25,6 @@ function App() {
     return () => window.removeEventListener('contextmenu', handleContextMenu);
   }, []);
 
-  if (route === 'loading') {
-    return <div style={{ width: '100vw', height: '100vh', background: 'rgba(20, 20, 20, 0.9)', color: 'white', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Initializing route...</div>;
-  }
 
   if (route === 'preferences') {
     return (
