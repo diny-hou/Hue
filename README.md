@@ -1,37 +1,61 @@
-# Hue - Marking Menu Launcher
+# Hue - Dynamic Marking Menu for Windows
 
-[![Tauri v2](https://img.shields.io/badge/Tauri-v2-blue.svg)](https://tauri.app/)
-[![React](https://img.shields.io/badge/React-19.0-blue.svg)](https://reactjs.org/)
+Hue は、プロフェッショナル向けソフトウェア（Mayaなど）で採用されている直感的な**マーキングメニュー（Pie Menu）**を、Windows環境全体で使えるようにするスタイリッシュなランチャーアプリケーションです。
+マウスのジェスチャーだけでお気に入りのアプリ、スクリプト、フォルダ、Webサイトへ瞬時にアクセスできます。
 
-Hue は、マウスの移動だけで全てを完結させるための放射状（Pie Menu）アプリケーションランチャーです。
+Rust (Tauri v2) と React (TypeScript) で構築されており、極めて軽量かつ高速に動作します。
 
-## Features
+## ✨ 主な機能 (Features)
 
-- **Global Hotkey Interaction**: Summon with one key, select with mouse, release to launch.
-- **Dynamic Slices**: Configure up to 8 slots for your favorite tools and folders.
-- **Auto-Fill from Selection**: Select multiple files to populate your group slices instantly.
-- **Modern UI/UX**: Customizable glassmorphism, HSL themes, and smooth micro-animations.
-- **Background Mode**: Stays in the System Tray and supports Auto-Start on Windows.
+* 🎯 **ジェスチャーベースのランチャー**: グローバルショートカット（デフォルト: `Alt + Space`）で画面上のどこにでも円形メニューを展開。マウスを任意の方向にスワイプするだけで瞬時にアプリを起動できます。
+* 📁 **階層型サブパネル機能**: 最大8方向のメインメニューに加え、それぞれに8つのサブアイテムを配置可能。ドラッグの距離に応じて階層が展開し、高度な**ジェスチャーロック機構**により、斜めや上下のストロークでも誤爆せずに正確にサブアイテムを選択できます。
+* 🎨 **フルカスタマイズ可能なUI**: 半透明のグラスモーフィズムデザイン。パネルの色、透明度、フォントサイズ、ホバー時の拡大率やアニメーション（Spread, Fade, Bounce等）を細かく設定可能です。
+* 🖱️ **ドラッグ＆ドロップ登録**: 設定画面を開かずとも、直接デスクトップやエクスプローラーから `.exe` やショートカットを円形メニューのスライスにドラッグ＆ドロップするだけで即座に登録できます。
+* 💻 **高度な起動オプション**: 実行ファイルだけでなく、バッチファイル（`.bat`, `.cmd`）、PowerShellスクリプト（`.ps1`）、環境変数付きでの起動など、開発者向けの機能も備えています。
+* ⚙️ **バックグラウンド待機**: システムトレイ（タスクトレイ）に常駐し、PC起動時の**自動起動（Auto-Start）**にも対応しています。
 
-## Development
+## 🚀 使い方 (Usage)
 
+1. **メニューの表示**:
+   * `Alt + Space` を押すと、マウスポインタの位置に円形のメニュー（Pie Menu）が表示されます。
+   * *(ショートカットキーは設定から自由に変更可能です)*
+
+2. **アプリの起動**:
+   * メニューが表示された状態で、起動したいアプリの方向（スライス）へマウスを動かし、クリックを離す、またはクリックするだけで起動します。
+
+3. **サブパネルの展開**:
+   * フォルダ（グループ）設定されているスライスへマウスをドラッグすると、その外側にさらに8つのサブメニューが展開されます。
+   * 一度サブメニューの領域に踏み込むとその親パネルが**ロック**され、そのまま上下左右にマウスを自由に動かしてサブアイテムを選択できます。
+   * ロックを解除して別の親パネルを選び直したい場合は、マウスをメニューの**「中央（デッドゾーン）」**に戻してください。
+
+4. **アイテムの編集**:
+   * アプリを登録したいスライスを**右クリック**すると、設定エディタがポップアップします。
+   * 名前、パス（またはURL）、環境変数を設定できます。「Browse」ボタンからの選択や、直接ファイルのDnDも可能です。
+
+## 🛠️ インストール・ビルド方法 (Installation / Build)
+
+本アプリは Node.js (npm) および Rust 環境が必要です。
+
+### 開発モードで起動する
 ```bash
-# Install dependencies
 npm install
-
-# Run in development mode
 npm run tauri dev
-
-# Build for production
-npm run tauri build
+# または付属のバッチファイルを使用
+start_hue.bat
 ```
 
-## Structure
+### 実行ファイル (.exe) をビルドする
+```bash
+npm run tauri build
+```
+ビルドが成功すると、`src-tauri/target/release/bundle/` 配下にインストーラー（`.msi`, `.exe`）が生成されます。
 
-- `src/`: React source code (UI & Interactivity)
-- `src-tauri/`: Rust source code (Backend, Windowing, OS APIs)
-- `src/components/PieMenu.tsx`: Core radial menu logic
-- `src/components/SliceEditor.tsx`: Configuration and reordering UI
+## 🏗️ 技術スタック
+- **Backend**: Rust, Tauri v2
+- **Frontend**: React, TypeScript, Vite
+- **Styling**: Vanilla CSS (Custom properties & CSS variables)
+- **State Management**: React Hooks (useEffect, useRef)
+- **Plugin**: tauri-plugin-global-shortcut, tauri-plugin-autostart, tauri-plugin-dialog
 
 ---
-Developed as a high-performance productivity tool for Windows.
+*Created with AI Pair Programming (Agentic Framework)*

@@ -6,7 +6,8 @@
     "linux"
   ],
   "windows": [
-    "main"
+    "main",
+    "preferences"
   ],
   "permissions": [
     "autostart:default"
