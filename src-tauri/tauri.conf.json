@@ -50,7 +50,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY5ODlEQjE5MzdCNEI0Q0QKUldUTnRMUTNHZHVKK2ZBYTk1cVBqVWxYaGdaN0RJc2dSeHlrckhOR2hjcHQ1NWM1eFNDbENYaEsK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVFNEFDNjc5QUVDQTIxRDIKUldUU0ljcXVlY1pLN3JvUllhTFNnd1dLaElMa1RQWG9kejlaUjgrdUUxY2NLVjMwK2pXMnIyWnoK",
       "endpoints": [
         "https://github.com/diny-hou/Hue/releases/latest/download/update.json"
       ],
