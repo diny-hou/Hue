@@ -35,23 +35,27 @@ jobs:
       - name: Build Tauri (signed bundles + updater artifacts)
         shell: pwsh
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          SIGNING_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+          if (-not $env:SIGNING_KEY_B64) {
             throw "Missing secret TAURI_SIGNING_PRIVATE_KEY"
           }
-          # Do not name the file with substrings of secrets (GHA masking corrupts env/paths)
-          $key = $env:TAURI_SIGNING_PRIVATE_KEY.Trim().TrimStart([char]0xFEFF)
+          $key = $env:SIGNING_KEY_B64.Trim().TrimStart([char]0xFEFF)
           $path = Join-Path $env:RUNNER_TEMP "updater_signing.key"
-          [System.IO.File]::WriteAllBytes($path, [System.Text.Encoding]::UTF8.GetBytes($key))
-          if (-not (Test-Path $path) -or ((Get-Item $path).Length -lt 32)) {
-            throw "Failed to write signing key file"
-          }
+          $utf8 = New-Object System.Text.UTF8Encoding $false
+          [System.IO.File]::WriteAllText($path, $key, $utf8)
+          Write-Host "Wrote signing key:" (Get-Item $path).Length "bytes"
+
+          # Pass env explicitly to node child (npm.cmd can drop pwsh env on Windows)
           $env:TAURI_SIGNING_PRIVATE_KEY_PATH = $path
-          Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY -ErrorAction SilentlyContinue
-          Write-Host "Signing key file bytes:" (Get-Item $path).Length
-          npm run tauri build
+          $env:TAURI_SIGNING_PRIVATE_KEY = $key
+          Remove-Item Env:\SIGNING_KEY_B64 -ErrorAction SilentlyContinue
+
+          $tauriCli = Join-Path $pwd "node_modules\@tauri-apps\cli\tauri.js"
+          if (-not (Test-Path $tauriCli)) { throw "Missing $tauriCli" }
+          node $tauriCli build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Resolve bundle paths
         id: bundle
