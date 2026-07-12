@@ -1,6 +1,6 @@
 @echo off
-:: Navigate to the directory where the batch file is located
-cd /d "%~dp0"
+:: Navigate to the repo root (parent of scripts/)
+cd /d "%~dp0.."
 
 :: Check if node is installed to provide a helpful error if it fails
 where npm >nul 2>nul

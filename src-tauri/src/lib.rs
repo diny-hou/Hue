@@ -6,6 +6,10 @@ mod menu_logic;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Updater: endpoints and pubkey in tauri.conf.json. Local HTTP: merge tauri.updater-local.json
+        // (`npm run tauri:build:local-updater`).
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--minimized"]),
@@ -28,8 +32,16 @@ pub fn run() {
 
             register_shortcut(&app_handle, &config.global_shortcut);
 
+            // Check if started with --minimized (autostart)
+            let args: Vec<String> = std::env::args().collect();
+            let is_minimized = args.contains(&"--minimized".to_string());
+
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_shadow(false);
+                // Hide window on startup if minimized flag is set (autostart)
+                if is_minimized {
+                    let _ = window.hide();
+                }
             }
 
             use tauri::{
@@ -58,10 +70,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::launch_app,
             commands::hide_menu,
+            commands::sync_main_click_through,
+            commands::reset_main_click_through,
+            commands::set_native_dialog_open,
             commands::get_config,
             commands::update_config,
             commands::pick_file,
-            commands::pick_files,
             commands::pick_folder,
             commands::update_shortcut,
             commands::open_preferences_window,

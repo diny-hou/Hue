@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Updater signing keys (never commit)
+src-tauri/.keys/
+
+# Build artifacts / local logs
+src-tauri/cargo_out.txt
+src-tauri/target/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

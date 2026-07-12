@@ -5,7 +5,7 @@
   "identifier": "com.takum.hue",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:1430",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
@@ -27,7 +27,7 @@
         "width": 400,
         "height": 600,
         "decorations": false,
-        "transparent": true,
+        "transparent": false,
         "visible": false,
         "alwaysOnTop": true
       }
@@ -39,6 +39,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -46,5 +47,17 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNGQURFODE0MjRFNjExQzEKUldUQkVlWWtGT2l0UHl4b2VQM1JJaG1CWDNwUDY2STJrYU8way94TFJFWElzeHN6MDFEYXdTYVkK",
+      "endpoints": [
+        "https://github.com/diny-hou/Hue/releases/latest/download/update.json"
+      ],
+      "dangerousInsecureTransportProtocol": false,
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }
