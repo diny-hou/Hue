@@ -32,10 +32,11 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Write updater signing key (no BOM)
+      - name: Build Tauri (signed bundles + updater artifacts)
         shell: pwsh
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
             throw "Missing secret TAURI_SIGNING_PRIVATE_KEY"
@@ -43,14 +44,13 @@ jobs:
           $key = $env:TAURI_SIGNING_PRIVATE_KEY.Trim().TrimStart([char]0xFEFF)
           $path = Join-Path $env:RUNNER_TEMP "hue.key"
           [System.IO.File]::WriteAllText($path, $key, (New-Object System.Text.UTF8Encoding $false))
-          # Avoid Out-File UTF8 BOM which breaks GITHUB_ENV on Windows
-          [System.IO.File]::AppendAllText($env:GITHUB_ENV, "KEY_PATH=$path`n")
-
-      - name: Build Tauri (signed bundles + updater artifacts)
-        env:
-          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ env.KEY_PATH }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npm run tauri build
+          if (-not (Test-Path $path) -or ((Get-Item $path).Length -lt 32)) {
+            throw "Failed to write signing key file"
+          }
+          # Prefer path over env string (Windows secret env can mangle base64)
+          $env:TAURI_SIGNING_PRIVATE_KEY_PATH = $path
+          Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY -ErrorAction SilentlyContinue
+          npm run tauri build
 
       - name: Resolve bundle paths
         id: bundle
