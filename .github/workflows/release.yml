@@ -32,9 +32,22 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Build Tauri (signed bundles + updater artifacts)
+      - name: Write updater signing key (no BOM)
+        shell: pwsh
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+            throw "Missing secret TAURI_SIGNING_PRIVATE_KEY"
+          }
+          $key = $env:TAURI_SIGNING_PRIVATE_KEY.Trim().TrimStart([char]0xFEFF)
+          $path = Join-Path $env:RUNNER_TEMP "hue.key"
+          [System.IO.File]::WriteAllText($path, $key, (New-Object System.Text.UTF8Encoding $false))
+          "KEY_PATH=$path" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build Tauri (signed bundles + updater artifacts)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ env.KEY_PATH }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri build
 

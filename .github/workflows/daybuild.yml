@@ -40,6 +40,11 @@ jobs:
         shell: pwsh
         run: |
           if ($env:TAURI_SIGNING_PRIVATE_KEY) {
+            $key = $env:TAURI_SIGNING_PRIVATE_KEY.Trim().TrimStart([char]0xFEFF)
+            $path = Join-Path $env:RUNNER_TEMP "hue.key"
+            [System.IO.File]::WriteAllText($path, $key, (New-Object System.Text.UTF8Encoding $false))
+            $env:TAURI_SIGNING_PRIVATE_KEY_PATH = $path
+            Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY
             npm run tauri build
           } else {
             Write-Host "No signing secret — building without updater artifacts"
