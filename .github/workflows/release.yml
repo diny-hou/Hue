@@ -43,7 +43,8 @@ jobs:
           $key = $env:TAURI_SIGNING_PRIVATE_KEY.Trim().TrimStart([char]0xFEFF)
           $path = Join-Path $env:RUNNER_TEMP "hue.key"
           [System.IO.File]::WriteAllText($path, $key, (New-Object System.Text.UTF8Encoding $false))
-          "KEY_PATH=$path" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # Avoid Out-File UTF8 BOM which breaks GITHUB_ENV on Windows
+          [System.IO.File]::AppendAllText($env:GITHUB_ENV, "KEY_PATH=$path`n")
 
       - name: Build Tauri (signed bundles + updater artifacts)
         env:
