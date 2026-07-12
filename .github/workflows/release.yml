@@ -55,11 +55,12 @@ jobs:
           if (-not $setup) { throw "No *-setup.exe in $nsisDir" }
 
           $tauriCli = "node_modules/@tauri-apps/cli/tauri.js"
+          # signer sign allows only one of key string or key path
           $env:TAURI_SIGNING_PRIVATE_KEY_PATH = $keyPath
-          $env:TAURI_SIGNING_PRIVATE_KEY = $key
+          Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY -ErrorAction SilentlyContinue
           Remove-Item Env:\SIGNING_KEY_B64 -ErrorAction SilentlyContinue
 
-          node $tauriCli signer sign $setup.FullName
+          node $tauriCli signer sign --private-key-path $keyPath $setup.FullName
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           $sig = Get-Item ($setup.FullName + ".sig")
