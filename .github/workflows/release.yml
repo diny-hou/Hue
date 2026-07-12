@@ -32,7 +32,11 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Build Tauri (signed bundles + updater artifacts)
+      # Build without createUpdaterArtifacts so CI does not need signing mid-build.
+      - name: Build Tauri installer
+        run: npm run build:exe
+
+      - name: Sign installer for updater
         shell: pwsh
         env:
           SIGNING_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -42,35 +46,37 @@ jobs:
             throw "Missing secret TAURI_SIGNING_PRIVATE_KEY"
           }
           $key = $env:SIGNING_KEY_B64.Trim().TrimStart([char]0xFEFF)
-          $path = Join-Path $env:RUNNER_TEMP "updater_signing.key"
+          $keyPath = Join-Path $env:RUNNER_TEMP "updater_signing.key"
           $utf8 = New-Object System.Text.UTF8Encoding $false
-          [System.IO.File]::WriteAllText($path, $key, $utf8)
-          Write-Host "Wrote signing key:" (Get-Item $path).Length "bytes"
+          [System.IO.File]::WriteAllText($keyPath, $key, $utf8)
 
-          # Pass env explicitly to node child (npm.cmd can drop pwsh env on Windows)
-          $env:TAURI_SIGNING_PRIVATE_KEY_PATH = $path
+          $nsisDir = "src-tauri/target/release/bundle/nsis"
+          $setup = Get-ChildItem $nsisDir -Filter "*-setup.exe" | Select-Object -First 1
+          if (-not $setup) { throw "No *-setup.exe in $nsisDir" }
+
+          $tauriCli = "node_modules/@tauri-apps/cli/tauri.js"
+          $env:TAURI_SIGNING_PRIVATE_KEY_PATH = $keyPath
           $env:TAURI_SIGNING_PRIVATE_KEY = $key
           Remove-Item Env:\SIGNING_KEY_B64 -ErrorAction SilentlyContinue
 
-          $tauriCli = Join-Path $pwd "node_modules\@tauri-apps\cli\tauri.js"
-          if (-not (Test-Path $tauriCli)) { throw "Missing $tauriCli" }
-          node $tauriCli build
+          node $tauriCli signer sign $setup.FullName
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $sig = Get-Item ($setup.FullName + ".sig")
+          if (-not $sig) { throw "Signature file was not created" }
+          Write-Host "Signed:" $setup.Name "->" $sig.Name
 
       - name: Resolve bundle paths
         id: bundle
         shell: pwsh
         run: |
-          $nsisDir = Join-Path "src-tauri/target/release/bundle/nsis" ""
-          if (-not (Test-Path $nsisDir)) {
-            throw "NSIS output not found: $nsisDir"
-          }
+          $nsisDir = "src-tauri/target/release/bundle/nsis"
           $setup = Get-ChildItem $nsisDir -Filter "*-setup.exe" | Select-Object -First 1
           if (-not $setup) { throw "No *-setup.exe in $nsisDir" }
           $sig = Get-Item ($setup.FullName + ".sig")
-          Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8 "SETUP_PATH=$($setup.FullName)"
-          Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8 "SETUP_NAME=$($setup.Name)"
-          Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8 "SIG_PATH=$($sig.FullName)"
+          Add-Content -Path $env:GITHUB_OUTPUT -Encoding ascii "SETUP_PATH=$($setup.FullName)"
+          Add-Content -Path $env:GITHUB_OUTPUT -Encoding ascii "SETUP_NAME=$($setup.Name)"
+          Add-Content -Path $env:GITHUB_OUTPUT -Encoding ascii "SIG_PATH=$($sig.FullName)"
 
       - name: Strip semver v prefix for manifest
         id: ver
@@ -78,7 +84,7 @@ jobs:
         run: |
           $tag = "${{ github.ref_name }}"
           if ($tag -match '^v(.+)$') { $v = $Matches[1] } else { $v = $tag }
-          Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8 "VERSION=$v"
+          Add-Content -Path $env:GITHUB_OUTPUT -Encoding ascii "VERSION=$v"
 
       - name: Write update.json (static manifest for Tauri updater)
         shell: pwsh
@@ -103,7 +109,8 @@ jobs:
               }
             }
           }
-          $manifest | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 update.json
+          $json = $manifest | ConvertTo-Json -Depth 6
+          [System.IO.File]::WriteAllText((Join-Path $pwd "update.json"), $json, (New-Object System.Text.UTF8Encoding $false))
           Get-Content update.json
 
       - name: Create GitHub Release and upload assets
