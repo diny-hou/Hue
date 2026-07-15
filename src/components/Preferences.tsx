@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getName, getTauriVersion, getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isEnabled, enable, disable } from '@tauri-apps/plugin-autostart';
@@ -60,11 +61,25 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     const [isRecording, setIsRecording] = useState(false);
     const [saving, setSaving] = useState(false);
     const [autoStart, setAutoStart] = useState(false);
+    const [appName, setAppName] = useState('Hue');
+    const [appVersion, setAppVersion] = useState('…');
+    const [tauriVersion, setTauriVersion] = useState('…');
 
     useEffect(() => {
         isEnabled()
             .then(setAutoStart)
             .catch(err => console.error("Failed to check autostart status:", err));
+    }, []);
+
+    useEffect(() => {
+        Promise.all([getName(), getVersion(), getTauriVersion()])
+            .then(([name, version, tauri]) => {
+                setAppName(name);
+                setAppVersion(version);
+                setTauriVersion(tauri);
+                document.title = `${name} Preferences v${version}`;
+            })
+            .catch(err => console.error("Failed to load app version info:", err));
     }, []);
 
     const handleToggleAutoStart = async () => {
@@ -183,7 +198,8 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                     }
                 }}
             >
-                Hue Preferences
+                <span>Hue Preferences</span>
+                <span className="preferences-version">v{appVersion}</span>
             </div>
 
             <div className="pref-tabs">
@@ -444,6 +460,26 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 <option value="glow">Glow</option>
                                 <option value="wobble">Wobble</option>
                             </select>
+                        </div>
+                    </>
+                )}
+
+                {activeTab === 'advanced' && (
+                    <>
+                        <div className="pref-row">
+                            <label style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>About</label>
+                        </div>
+                        <div className="pref-row">
+                            <label>App</label>
+                            <span className="pref-value">{appName}</span>
+                        </div>
+                        <div className="pref-row">
+                            <label>Version</label>
+                            <span className="pref-value">v{appVersion}</span>
+                        </div>
+                        <div className="pref-row">
+                            <label>Tauri</label>
+                            <span className="pref-value">v{tauriVersion}</span>
                         </div>
                     </>
                 )}
