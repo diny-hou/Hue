@@ -69,6 +69,7 @@ export const PieMenu: React.FC = () => {
     const isParentLockedRef = React.useRef(false);
     const lastDistanceRef = React.useRef(0);
     const lastShowTimeRef = React.useRef(0);
+    const clickThroughStateRef = React.useRef({ editorOpen: false, hitDiskRadius: 180 });
 
     useEffect(() => {
         invoke<MenuConfig>('get_config')
@@ -166,6 +167,42 @@ export const PieMenu: React.FC = () => {
     useEffect(() => {
         configRef.current = items;
     }, [items]);
+
+    useEffect(() => {
+        if (!isVisible) {
+            invoke('reset_main_click_through').catch(() => {});
+            return;
+        }
+        const tick = () => {
+            const s = clickThroughStateRef.current;
+            const extraHitRects: { x: number; y: number; width: number; height: number }[] = [];
+            if (s.editorOpen) {
+                document
+                    .querySelectorAll<HTMLElement>('.slice-editor, .slice-editor-picker-menu')
+                    .forEach(el => {
+                        const r = el.getBoundingClientRect();
+                        if (r.width > 0 && r.height > 0) {
+                            extraHitRects.push({
+                                x: r.left,
+                                y: r.top,
+                                width: r.width,
+                                height: r.height,
+                            });
+                        }
+                    });
+            }
+            invoke('sync_main_click_through', {
+                hitDiskRadiusLogical: s.hitDiskRadius,
+                extraHitRects: extraHitRects.length > 0 ? extraHitRects : null,
+            }).catch(() => {});
+        };
+        tick();
+        const id = window.setInterval(tick, 32);
+        return () => {
+            clearInterval(id);
+            invoke('reset_main_click_through').catch(() => {});
+        };
+    }, [isVisible]);
 
     // Update the activeIndex and hover proxy together
     const updateActiveIndex = (index: number | null) => {
@@ -298,7 +335,6 @@ export const PieMenu: React.FC = () => {
                 if (childItem.path) {
                     invoke('launch_app', {
                         path: childItem.path,
-                        env: childItem.env
                     }).catch(console.error);
                 }
             } else {
@@ -306,7 +342,6 @@ export const PieMenu: React.FC = () => {
                 if (currentItem.path) {
                     invoke('launch_app', {
                         path: currentItem.path,
-                        env: currentItem.env
                     }).catch(console.error);
                 }
             }
@@ -396,6 +431,17 @@ export const PieMenu: React.FC = () => {
     const animClass = configFull?.appearance?.animation_type ? `anim-${configFull.appearance.animation_type}` : 'anim-spread';
     const hoverAnimClass = configFull?.appearance?.hover_animation ? `hover-anim-${configFull.appearance.hover_animation}` : 'hover-anim-none';
 
+    const isGroupOpen =
+        activeIndex !== null &&
+        !!items[activeIndex] &&
+        (!items[activeIndex].path || (items[activeIndex].children && items[activeIndex].children!.length > 0));
+    const hitDiskRadius = isGroupOpen ? childOuterRadius : outerRadius;
+
+    clickThroughStateRef.current = {
+        editorOpen: editingIndex !== null,
+        hitDiskRadius,
+    };
+
     return (
         <div
             className={`pie-menu-container ${isVisible ? 'visible' : ''} ${animClass}`}
@@ -411,14 +457,20 @@ export const PieMenu: React.FC = () => {
                         <feGaussianBlur stdDeviation="5" />
                     </filter>
                 </defs>
+                {/* Invisible disk: limits hit-testing to the pie rings (container uses pointer-events: none). Center uses .center-hole above in DOM. */}
+                <circle
+                    className="pie-hit-disk"
+                    cx={center}
+                    cy={center}
+                    r={hitDiskRadius}
+                    fill="rgba(0,0,0,0.01)"
+                />
                 {items.map((_item, index) => {
                     const startAngle = index * sliceAngle - halfSlice;
                     // small gap between slices for aesthetics
                     const endAngle = startAngle + sliceAngle - 2;
 
                     const pathD = describeArc(center, center, innerRadius, outerRadius, startAngle, endAngle);
-
-                    const isGroupOpen = activeIndex !== null && items[activeIndex] && (!items[activeIndex].path || (items[activeIndex].children && items[activeIndex].children.length > 0));
 
                     let isActive = false;
                     if (isGroupOpen) {
@@ -541,7 +593,6 @@ export const PieMenu: React.FC = () => {
                         onContextMenu={e => {
                             e.preventDefault();
                             e.stopPropagation();
-                            const isGroupOpen = activeIndex !== null && items[activeIndex] && (!items[activeIndex].path || (items[activeIndex].children && items[activeIndex].children.length > 0));
                             if (isGroupOpen) {
                                 handleOpenEditor(activeIndex, index);
                             } else {
@@ -581,6 +632,7 @@ export const PieMenu: React.FC = () => {
                         : items[editingIndex]
                     }
                     position={editingPos}
+                    allowChildren={editingChildIndex === null}
                     onSave={(updatedItem: SliceItem) => {
                         const newItems = [...items];
 

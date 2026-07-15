@@ -1,13 +1,25 @@
 use crate::menu_logic::{self, MenuConfig};
 use std::process::Command;
-use tauri::{Emitter, Manager, WebviewWindowBuilder};
+use std::sync::atomic::{AtomicBool, Ordering};
+use serde::Deserialize;
+use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
+
+static NATIVE_DIALOG_OPEN: AtomicBool = AtomicBool::new(false);
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HitRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
 
 #[tauri::command]
 pub fn launch_app(
     app_handle: tauri::AppHandle,
     path: String,
-    env: Option<std::collections::HashMap<String, String>>,
 ) {
     let clean_path = path.trim().trim_matches('"').trim_matches('\'');
     let p = std::path::Path::new(clean_path);
@@ -55,14 +67,10 @@ pub fn launch_app(
         }
     }
 
-    // Inject custom environment variables if provided
-    if let Some(envs) = env {
-        cmd.envs(envs);
-    }
-
     let _ = cmd.spawn();
 
     if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.set_ignore_cursor_events(false);
         let _ = window.hide();
     }
 }
@@ -70,7 +78,98 @@ pub fn launch_app(
 #[tauri::command]
 pub fn hide_menu(app_handle: tauri::AppHandle) {
     if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.set_ignore_cursor_events(false);
         let _ = window.hide();
+    }
+}
+
+/// When the main window uses transparency, OS hit-testing still covers the full rectangle.
+/// Toggle pass-through so clicks outside the pie / editor hit regions reach windows behind Hue.
+#[tauri::command]
+pub fn sync_main_click_through(
+    app_handle: tauri::AppHandle,
+    hit_disk_radius_logical: f64,
+    extra_hit_rects: Option<Vec<HitRect>>,
+) {
+    let Some(window) = app_handle.get_webview_window("main") else {
+        return;
+    };
+    if !window.is_visible().unwrap_or(false) {
+        let _ = window.set_ignore_cursor_events(false);
+        return;
+    }
+    // Native file/folder dialogs must receive clicks; the always-on-top transparent
+    // window would otherwise eat them outside (and sometimes over) the dialog.
+    if NATIVE_DIALOG_OPEN.load(Ordering::SeqCst) {
+        let _ = window.set_ignore_cursor_events(true);
+        return;
+    }
+    let Ok(scale) = window.scale_factor() else {
+        return;
+    };
+    let Ok(cursor) = window.cursor_position() else {
+        return;
+    };
+    let Ok(inner_pos) = window.inner_position() else {
+        return;
+    };
+    let Ok(inner) = window.inner_size() else {
+        return;
+    };
+
+    let cx = cursor.x - f64::from(inner_pos.x);
+    let cy = cursor.y - f64::from(inner_pos.y);
+    let w = inner.width as f64;
+    let h = inner.height as f64;
+
+    let outside_client = cx < 0.0 || cy < 0.0 || cx > w || cy > h;
+    let center_x = w / 2.0;
+    let center_y = h / 2.0;
+    let dx = cx - center_x;
+    let dy = cy - center_y;
+    let dist = (dx * dx + dy * dy).sqrt();
+    let r = hit_disk_radius_logical * scale;
+    let over_pie = dist <= r;
+
+    let over_extra = extra_hit_rects
+        .as_ref()
+        .map(|rects| {
+            rects.iter().any(|rect| {
+                let left = rect.x * scale;
+                let top = rect.y * scale;
+                let right = (rect.x + rect.width) * scale;
+                let bottom = (rect.y + rect.height) * scale;
+                cx >= left && cx <= right && cy >= top && cy <= bottom
+            })
+        })
+        .unwrap_or(false);
+
+    let pass_through = outside_client || !(over_pie || over_extra);
+    let _ = window.set_ignore_cursor_events(pass_through);
+}
+
+/// Call around blocking OS file/folder dialogs so the always-on-top Hue window
+/// does not intercept clicks meant for the dialog.
+#[tauri::command]
+pub fn set_native_dialog_open(app_handle: tauri::AppHandle, open: bool) {
+    NATIVE_DIALOG_OPEN.store(open, Ordering::SeqCst);
+    if let Some(window) = app_handle.get_webview_window("main") {
+        if open {
+            let _ = window.set_ignore_cursor_events(true);
+            let _ = window.set_always_on_top(false);
+        } else {
+            let _ = window.set_always_on_top(true);
+            // sync_main_click_through will restore the correct ignore flag on the next tick
+        }
+    }
+}
+
+#[tauri::command]
+pub fn reset_main_click_through(app_handle: tauri::AppHandle) {
+    NATIVE_DIALOG_OPEN.store(false, Ordering::SeqCst);
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.set_always_on_top(true);
+        let _ = window.set_ignore_cursor_events(false);
     }
 }
 
@@ -137,7 +236,6 @@ pub fn empty_all_slices(app_handle: tauri::AppHandle) {
         .map(|_| menu_logic::MenuItem {
             name: String::new(),
             path: String::new(),
-            env: None,
             children: vec![],
         })
         .collect();
@@ -147,40 +245,39 @@ pub fn empty_all_slices(app_handle: tauri::AppHandle) {
     }
 }
 
-#[tauri::command]
-pub async fn pick_file(app_handle: tauri::AppHandle) -> Option<String> {
-    // Try file picker first (allows any file type)
-    let file = app_handle
-        .dialog()
-        .file()
-        .add_filter("All Files", &["*"])
-        .add_filter("Executables", &["exe", "bat", "cmd", "lnk", "ps1"])
-        .blocking_pick_file();
-    file.and_then(|f| f.as_path().map(|p| p.to_string_lossy().into_owned()))
+fn with_native_dialog_pass_through<T>(app_handle: &tauri::AppHandle, f: impl FnOnce() -> T) -> T {
+    NATIVE_DIALOG_OPEN.store(true, Ordering::SeqCst);
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.set_ignore_cursor_events(true);
+        let _ = window.set_always_on_top(false);
+    }
+    let result = f();
+    NATIVE_DIALOG_OPEN.store(false, Ordering::SeqCst);
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.set_always_on_top(true);
+    }
+    result
 }
 
 #[tauri::command]
-pub async fn pick_files(app_handle: tauri::AppHandle) -> Vec<String> {
-    let files = app_handle
-        .dialog()
-        .file()
-        .add_filter("All Files", &["*"])
-        .add_filter("Executables", &["exe", "bat", "cmd", "lnk", "ps1"])
-        .blocking_pick_files();
-
-    match files {
-        Some(file_paths) => file_paths
-            .into_iter()
-            .filter_map(|fp| fp.as_path().map(|p| p.to_string_lossy().into_owned()))
-            .collect(),
-        None => vec![],
-    }
+pub async fn pick_file(app_handle: tauri::AppHandle) -> Option<String> {
+    with_native_dialog_pass_through(&app_handle, || {
+        let file = app_handle
+            .dialog()
+            .file()
+            .add_filter("All Files", &["*"])
+            .add_filter("Executables", &["exe", "bat", "cmd", "lnk", "ps1"])
+            .blocking_pick_file();
+        file.and_then(|f| f.as_path().map(|p| p.to_string_lossy().into_owned()))
+    })
 }
 
 #[tauri::command]
 pub async fn pick_folder(app_handle: tauri::AppHandle) -> Option<String> {
-    let folder = app_handle.dialog().file().blocking_pick_folder();
-    folder.and_then(|f| f.as_path().map(|p| p.to_string_lossy().into_owned()))
+    with_native_dialog_pass_through(&app_handle, || {
+        let folder = app_handle.dialog().file().blocking_pick_folder();
+        folder.and_then(|f| f.as_path().map(|p| p.to_string_lossy().into_owned()))
+    })
 }
 
 #[tauri::command]

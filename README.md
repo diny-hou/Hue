@@ -1,61 +1,91 @@
-# Hue - Dynamic Marking Menu for Windows
+# Hue — Dynamic Marking Menu for Windows
 
-Hue は、プロフェッショナル向けソフトウェア（Mayaなど）で採用されている直感的な**マーキングメニュー（Pie Menu）**を、Windows環境全体で使えるようにするスタイリッシュなランチャーアプリケーションです。
-マウスのジェスチャーだけでお気に入りのアプリ、スクリプト、フォルダ、Webサイトへ瞬時にアクセスできます。
+Hue は、Windows 全体で使える **マーキングメニュー（Pie Menu）ランチャー** です。  
+グローバルショートカット（デフォルト: `Alt + Space`）で円形メニューを開き、ジェスチャーでアプリ・フォルダ・スクリプトを起動できます。
 
-Rust (Tauri v2) と React (TypeScript) で構築されており、極めて軽量かつ高速に動作します。
+- **リポジトリ**: [github.com/diny-hou/Hue](https://github.com/diny-hou/Hue)
+- **ダウンロード**: [Releases](https://github.com/diny-hou/Hue/releases/latest) からインストーラ（`*-setup.exe`）を取得
 
-## ✨ 主な機能 (Features)
+Rust (Tauri v2) + React (TypeScript) で構築。軽量・常駐型。
 
-* 🎯 **ジェスチャーベースのランチャー**: グローバルショートカット（デフォルト: `Alt + Space`）で画面上のどこにでも円形メニューを展開。マウスを任意の方向にスワイプするだけで瞬時にアプリを起動できます。
-* 📁 **階層型サブパネル機能**: 最大8方向のメインメニューに加え、それぞれに8つのサブアイテムを配置可能。ドラッグの距離に応じて階層が展開し、高度な**ジェスチャーロック機構**により、斜めや上下のストロークでも誤爆せずに正確にサブアイテムを選択できます。
-* 🎨 **フルカスタマイズ可能なUI**: 半透明のグラスモーフィズムデザイン。パネルの色、透明度、フォントサイズ、ホバー時の拡大率やアニメーション（Spread, Fade, Bounce等）を細かく設定可能です。
-* 🖱️ **ドラッグ＆ドロップ登録**: 設定画面を開かずとも、直接デスクトップやエクスプローラーから `.exe` やショートカットを円形メニューのスライスにドラッグ＆ドロップするだけで即座に登録できます。
-* 💻 **高度な起動オプション**: 実行ファイルだけでなく、バッチファイル（`.bat`, `.cmd`）、PowerShellスクリプト（`.ps1`）、環境変数付きでの起動など、開発者向けの機能も備えています。
-* ⚙️ **バックグラウンド待機**: システムトレイ（タスクトレイ）に常駐し、PC起動時の**自動起動（Auto-Start）**にも対応しています。
+## 主な機能
 
-## 🚀 使い方 (Usage)
+- **ジェスチャーランチャー** — 8 方向メインメニュー + 各スライスに最大 8 個のサブアイテム
+- **グラスモーフィズム UI** — 色・透明度・ホバーアニメーション等を Preferences から変更
+- **ドラッグ＆ドロップ登録** — `.exe` やショートカットをスライスへ DnD で登録
+- **スクリプト起動** — `.exe`, `.bat`, `.cmd`, `.ps1`, `.lnk`, URL 等
+- **自動起動** — システムトレイ常駐、起動時自動実行に対応
+- **アプリ内更新** — 起動時に新バージョンを確認し、ユーザーが選べばその場で更新（再インストール不要）
 
-1. **メニューの表示**:
-   * `Alt + Space` を押すと、マウスポインタの位置に円形のメニュー（Pie Menu）が表示されます。
-   * *(ショートカットキーは設定から自由に変更可能です)*
+## インストール（ユーザー）
 
-2. **アプリの起動**:
-   * メニューが表示された状態で、起動したいアプリの方向（スライス）へマウスを動かし、クリックを離す、またはクリックするだけで起動します。
+1. [Releases](https://github.com/diny-hou/Hue/releases/latest) から `Hue_*_x64-setup.exe` をダウンロードしてインストール
+2. `Alt + Space` でメニューを表示
+3. 以降、新しい **product** 版が出ると起動時に更新ダイアログが表示されます（Later / Install and restart）
 
-3. **サブパネルの展開**:
-   * フォルダ（グループ）設定されているスライスへマウスをドラッグすると、その外側にさらに8つのサブメニューが展開されます。
-   * 一度サブメニューの領域に踏み込むとその親パネルが**ロック**され、そのまま上下左右にマウスを自由に動かしてサブアイテムを選択できます。
-   * ロックを解除して別の親パネルを選び直したい場合は、マウスをメニューの**「中央（デッドゾーン）」**に戻してください。
+初回のみインストーラが必要です。2 回目以降はアプリ内更新で足ります。
 
-4. **アイテムの編集**:
-   * アプリを登録したいスライスを**右クリック**すると、設定エディタがポップアップします。
-   * 名前、パス（またはURL）、環境変数を設定できます。「Browse」ボタンからの選択や、直接ファイルのDnDも可能です。
+## 開発
 
-## 🛠️ インストール・ビルド方法 (Installation / Build)
+### 必要環境
 
-本アプリは Node.js (npm) および Rust 環境が必要です。
+- Node.js 20+
+- Rust (stable)
+- Windows（ビルドターゲット）
 
-### 開発モードで起動する
+### ローカル起動
+
 ```bash
 npm install
 npm run tauri dev
-# または付属のバッチファイルを使用
-start_hue.bat
 ```
 
-### 実行ファイル (.exe) をビルドする
+Windows では `scripts/start_hue.bat` でも起動できます。
+
+### ビルド
+
 ```bash
 npm run tauri build
 ```
-ビルドが成功すると、`src-tauri/target/release/bundle/` 配下にインストーラー（`.msi`, `.exe`）が生成されます。
 
-## 🏗️ 技術スタック
+成果物: `src-tauri/target/release/bundle/nsis/`
+
+署名なしのローカル exe のみ: `npm run build:exe`
+
+## リリース運用（product / daybuild）
+
+| ブランチ | 用途 | CI | ユーザーへの影響 |
+|----------|------|-----|------------------|
+| `main` | **product（本番）** | タグ `v*` を push → [release.yml](.github/workflows/release.yml) | `/releases/latest` + 自動更新 |
+| `daybuild` | **開発・日次ビルド** | push → [daybuild.yml](.github/workflows/daybuild.yml) | **prerelease** のみ（本番更新チャネルには載らない） |
+
+### product を出す手順
+
+1. `main` で `package.json` / `tauri.conf.json` / `Cargo.toml` の version を揃える
+2. コミットを push
+3. `main` からタグを打つ: `git tag v0.1.1 && git push origin v0.1.1`
+4. GitHub Actions が signed installer + `update.json` を Release にアップロード
+
+### daybuild を出す手順
+
+1. `daybuild` ブランチに push（または `workflow_dispatch`）
+2. prerelease として `daybuild-YYYYMMDD-<sha>` タグの Release が作成される
+
+詳細: [docs/UPDATER.md](docs/UPDATER.md)
+
+## 公開前チェックリスト
+
+- [ ] GitHub remote が `diny-hou/Hue`
+- [ ] リポ Secrets: `TAURI_SIGNING_PRIVATE_KEY`（必要なら `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`）
+- [ ] `tauri.conf.json` の updater endpoint が `diny-hou/Hue`
+- [ ] タグの version と manifest の version が一致
+
+## 技術スタック
+
 - **Backend**: Rust, Tauri v2
 - **Frontend**: React, TypeScript, Vite
-- **Styling**: Vanilla CSS (Custom properties & CSS variables)
-- **State Management**: React Hooks (useEffect, useRef)
-- **Plugin**: tauri-plugin-global-shortcut, tauri-plugin-autostart, tauri-plugin-dialog
+- **Plugins**: global-shortcut, autostart, dialog, updater, process
 
----
-*Created with AI Pair Programming (Agentic Framework)*
+## ライセンス
+
+（未定 — 公開時に LICENSE を追加してください）

@@ -80,8 +80,6 @@ pub struct MenuItem {
     pub name: String,
     pub path: String,
     #[serde(default)]
-    pub env: Option<std::collections::HashMap<String, String>>,
-    #[serde(default)]
     pub children: Vec<MenuItem>,
 }
 
@@ -107,24 +105,20 @@ impl Default for MenuConfig {
                 MenuItem {
                     name: "Terminal".into(),
                     path: "wt.exe".into(),
-                    env: None,
                     children: vec![
                         MenuItem {
                             name: "PowerShell".into(),
                             path: "powershell.exe".into(),
-                            env: None,
                             children: vec![],
                         },
                         MenuItem {
                             name: "CMD".into(),
                             path: "cmd.exe".into(),
-                            env: None,
                             children: vec![],
                         },
                         MenuItem {
                             name: "WSL".into(),
                             path: "wsl.exe".into(),
-                            env: None,
                             children: vec![],
                         },
                     ],
@@ -132,43 +126,36 @@ impl Default for MenuConfig {
                 MenuItem {
                     name: "Browser".into(),
                     path: "chrome.exe".into(),
-                    env: None,
                     children: vec![],
                 },
                 MenuItem {
                     name: "Explorer".into(),
                     path: "explorer.exe".into(),
-                    env: None,
                     children: vec![],
                 },
                 MenuItem {
                     name: "Notepad".into(),
                     path: "notepad.exe".into(),
-                    env: None,
                     children: vec![],
                 },
                 MenuItem {
                     name: "Settings".into(),
                     path: "ms-settings:".into(),
-                    env: None,
                     children: vec![],
                 },
                 MenuItem {
                     name: "TaskMgr".into(),
                     path: "taskmgr.exe".into(),
-                    env: None,
                     children: vec![],
                 },
                 MenuItem {
                     name: "Calc".into(),
                     path: "calc.exe".into(),
-                    env: None,
                     children: vec![],
                 },
                 MenuItem {
                     name: "Paint".into(),
                     path: "mspaint.exe".into(),
-                    env: None,
                     children: vec![],
                 },
             ],

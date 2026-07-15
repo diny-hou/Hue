@@ -20,7 +20,13 @@ export const StandalonePreferences: React.FC = () => {
             });
     }, []);
 
-    if (!config) return <div style={{ color: '#ffffff', padding: '20px', background: '#222', borderRadius: '8px' }}>Loading Preferences... (Check Console)</div>;
+    if (!config) return (
+        <div className="preferences-shell">
+            <div className="preferences-modal" style={{ justifyContent: 'center', alignItems: 'center' }}>
+                <span style={{ color: '#ffffff', fontSize: 14 }}>Loading preferences…</span>
+            </div>
+        </div>
+    );
 
     const handleWindowClose = async () => {
         try {
@@ -185,10 +191,11 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     };
 
     return (
-        <div
-            className="preferences-modal"
-            onContextMenu={e => e.preventDefault()}
-        >
+        <div className="preferences-shell">
+            <div
+                className="preferences-modal"
+                onContextMenu={e => e.preventDefault()}
+            >
             <div
                 className="preferences-header"
                 onPointerDown={(e) => {
@@ -493,6 +500,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                     Close
                 </button>
             </div>
-        </div >
+            </div>
+        </div>
     );
 };

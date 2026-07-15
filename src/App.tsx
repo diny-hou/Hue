@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { PieMenu } from './components/PieMenu';
 import { StandalonePreferences } from './components/Preferences';
+import { UpdatePrompt } from './components/UpdatePrompt';
 import './index.css';
 
 function App() {
@@ -25,17 +26,27 @@ function App() {
     return () => window.removeEventListener('contextmenu', handleContextMenu);
   }, []);
 
+  // Preferences runs in its own webview: solid background + non-pass-through root (main stays transparent)
+  useLayoutEffect(() => {
+    if (route !== 'preferences') return;
+    document.documentElement.classList.add('hue-preferences-window');
+    return () => document.documentElement.classList.remove('hue-preferences-window');
+  }, [route]);
+
 
   if (route === 'preferences') {
     return (
-      <div style={{ width: '100vw', height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      <div className="preferences-app-root">
         <StandalonePreferences />
       </div>
     );
   }
 
   return (
-    <PieMenu />
+    <div style={{ width: '100vw', height: '100vh', pointerEvents: 'none' }}>
+      <PieMenu />
+      <UpdatePrompt />
+    </div>
   );
 }
 

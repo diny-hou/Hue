@@ -4,10 +4,36 @@
   --hover-color: rgba(255, 255, 255, 0.2);
   --text-color: #ffffff;
   --accent-color: #6366f1;
+  --accent-color-rgb: 99, 102, 241;
+}
+
+/* Preferences window: avoid 100vw overflow (Windows scrollbar) and fill the webview */
+.preferences-app-root {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  pointer-events: auto;
+}
+
+html.hue-preferences-window {
+  background: #1c1f26 !important;
+}
+
+html.hue-preferences-window body {
+  background: #1c1f26 !important;
+}
+
+html.hue-preferences-window #root {
+  pointer-events: auto;
 }
 
 html {
   background: transparent !important;
+  height: 100%;
 }
 
 body {
@@ -29,6 +55,8 @@ body {
   justify-content: center;
   align-items: center;
   overflow: hidden;
+  /* Let clicks pass through except on descendants with pointer-events: auto (pie panels, preferences, etc.) */
+  pointer-events: none;
 }
 
 /* Glassmorphism Pie Menu Container */
@@ -46,7 +74,8 @@ body {
 .pie-menu-container.visible {
   opacity: 1;
   transform: scale(1);
-  pointer-events: auto;
+  /* Children (slices, hit disk, labels) use pointer-events: auto; outside the menu clicks pass through the transparent window */
+  pointer-events: none;
 }
 
 /* Animation variants */
@@ -103,6 +132,13 @@ body {
   height: 100%;
   transform: rotate(-90deg);
   /* Start from top */
+  pointer-events: none;
+}
+
+/* Full-disk hit target for marking-menu drag; radius matches outer ring in PieMenu (no grab outside panels) */
+.pie-hit-disk {
+  pointer-events: auto;
+  cursor: default;
 }
 
 /* Individual Slice */
@@ -268,6 +304,7 @@ body {
   width: 120px;
   height: 120px;
   transform: translate(-50%, -50%);
+  pointer-events: auto;
   border-radius: 50%;
   background: rgba(30, 30, 30, 0.6);
   backdrop-filter: blur(20px);
@@ -290,6 +327,7 @@ body {
   position: absolute;
   transform: translate(-50%, -50%);
   z-index: 100;
+  pointer-events: auto;
   background: rgba(20, 20, 30, 0.85);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
@@ -359,47 +397,71 @@ body {
   border-color: var(--accent-color);
 }
 
-.slice-editor-type-toggle {
-  display: flex;
-  gap: 0.25rem;
-  margin-bottom: 0.5rem;
-}
-
-.slice-editor-inner-tabs {
-  display: flex;
-  gap: 0.25rem;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.type-btn {
-  flex: 1;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.6);
-  padding: 6px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.type-btn.active {
-  background: rgba(99, 102, 241, 0.2);
-  border-color: var(--accent-color);
-  color: white;
-}
-
-.type-btn:hover:not(.active) {
-  background: rgba(255, 255, 255, 0.1);
-}
-
 .slice-editor-path-row {
   display: flex;
   gap: 6px;
   align-items: center;
+}
+
+.slice-editor-label-row {
+  margin-bottom: 2px;
+}
+
+.slice-editor-browse-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.slice-editor-picker-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 96px;
+  padding: 4px;
+  background: rgba(28, 28, 40, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.slice-editor-picker-menu button {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.slice-editor-picker-menu button:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.25);
+  color: #fff;
+}
+
+.slice-editor-picker-menu button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.slice-editor-add-group {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.slice-editor-add-group:hover {
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .slice-editor-body {
@@ -578,88 +640,31 @@ body {
   background: rgba(255, 255, 255, 0.18);
 }
 
-.slice-editor-env-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 10px;
-}
-
-.slice-editor-add-env {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: white;
-  border-radius: 4px;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.slice-editor-add-env:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.slice-editor-env-list {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  max-height: 100px;
-  overflow-y: auto;
-  margin-bottom: 15px;
-}
-
-.slice-editor-env-row {
-  display: flex;
-  gap: 5px;
-  align-items: center;
-}
-
-.env-key {
-  flex: 1;
-  text-transform: uppercase;
-}
-
-.env-equals {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 12px;
-}
-
-.env-val {
-  flex: 2;
-}
-
-.slice-editor-remove-env {
-  background: rgba(255, 50, 50, 0.2);
-  border: 1px solid rgba(255, 50, 50, 0.3);
-  color: white;
-  border-radius: 4px;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.slice-editor-remove-env:hover {
-  background: rgba(255, 50, 50, 0.4);
-}
-
-/* Preferences Modal */
-.preferences-modal {
-  width: 100vw;
-  height: 100vh;
+/* Preferences: panel fills the whole webview so tab switches don’t change window/card size */
+.preferences-shell {
   box-sizing: border-box;
-  background: rgba(20, 20, 20, 0.75);
-  backdrop-filter: blur(25px);
-  -webkit-backdrop-filter: blur(25px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  pointer-events: auto;
+  padding: 0;
+}
+
+.preferences-modal {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  box-sizing: border-box;
+  pointer-events: auto;
+  background: #252830;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   padding: 16px;
@@ -677,6 +682,24 @@ body {
   cursor: move;
   margin-bottom: 12px;
   text-align: center;
+  flex-shrink: 0;
+}
+
+.pref-tab-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preferences-advanced-placeholder {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .preferences-version {
@@ -694,23 +717,25 @@ body {
 
 .pref-tabs {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
   background: rgba(0, 0, 0, 0.2);
   padding: 6px;
   border-radius: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
 .pref-tabs button {
-  flex: 1;
+  flex: 1 1 calc(33.333% - 6px);
+  min-width: calc(33.333% - 6px);
   background: transparent;
   border: none;
   color: rgba(255, 255, 255, 0.5);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  padding: 8px 12px;
+  padding: 8px 6px;
   border-radius: 8px;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: center;
@@ -861,7 +886,9 @@ body {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 25px;
+  margin-top: 16px;
+  flex-shrink: 0;
+  padding-top: 4px;
 }
 
 .pref-save,
@@ -950,4 +977,115 @@ body {
 
 .toggle-switch .slider.round:before {
   border-radius: 50%;
+}
+
+/* Auto-updater prompt (main window) */
+.update-prompt-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+}
+
+.update-prompt-modal {
+  width: min(420px, calc(100vw - 32px));
+  max-height: min(80vh, 520px);
+  overflow: auto;
+  padding: 20px;
+  border-radius: 12px;
+  background: #252830;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  color: #fff;
+}
+
+.update-prompt-title {
+  margin: 0 0 12px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.update-prompt-version {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.update-prompt-cur {
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 400;
+}
+
+.update-prompt-notes {
+  margin: 0 0 16px;
+  padding: 12px;
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.update-prompt-progress-wrap {
+  margin-top: 8px;
+}
+
+.update-prompt-progress-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--accent-color);
+  transition: width 0.2s ease;
+}
+
+.update-prompt-progress-label {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.update-prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.update-prompt-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.update-prompt-btn.primary {
+  background: var(--accent-color);
+  color: #fff;
+}
+
+.update-prompt-btn.primary:hover {
+  filter: brightness(1.1);
+}
+
+.update-prompt-btn.secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.update-prompt-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.update-prompt-error {
+  margin: 0;
+  font-size: 13px;
+  color: #ff8a8a;
 }

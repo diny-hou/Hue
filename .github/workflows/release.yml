@@ -1,0 +1,126 @@
+# Product release — push a semver tag from main (e.g. v0.1.1).
+# Creates a stable GitHub Release with signed installer + update.json for auto-update.
+name: Release (product)
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      # Build without createUpdaterArtifacts so CI does not need signing mid-build.
+      - name: Build Tauri installer
+        run: npm run build:exe
+
+      - name: Sign installer for updater
+        shell: pwsh
+        env:
+          SIGNING_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if (-not $env:SIGNING_KEY_B64) {
+            throw "Missing secret TAURI_SIGNING_PRIVATE_KEY"
+          }
+          $key = $env:SIGNING_KEY_B64.Trim().TrimStart([char]0xFEFF)
+          $keyPath = Join-Path $env:RUNNER_TEMP "updater_signing.key"
+          $utf8 = New-Object System.Text.UTF8Encoding $false
+          [System.IO.File]::WriteAllText($keyPath, $key, $utf8)
+
+          $nsisDir = "src-tauri/target/release/bundle/nsis"
+          $setup = Get-ChildItem $nsisDir -Filter "*-setup.exe" | Select-Object -First 1
+          if (-not $setup) { throw "No *-setup.exe in $nsisDir" }
+
+          $tauriCli = "node_modules/@tauri-apps/cli/tauri.js"
+          # signer sign allows only one of key string or key path
+          $env:TAURI_SIGNING_PRIVATE_KEY_PATH = $keyPath
+          Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY -ErrorAction SilentlyContinue
+          Remove-Item Env:\SIGNING_KEY_B64 -ErrorAction SilentlyContinue
+
+          node $tauriCli signer sign --private-key-path $keyPath $setup.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $sig = Get-Item ($setup.FullName + ".sig")
+          if (-not $sig) { throw "Signature file was not created" }
+          Write-Host "Signed:" $setup.Name "->" $sig.Name
+
+      - name: Resolve bundle paths
+        id: bundle
+        shell: pwsh
+        run: |
+          $nsisDir = "src-tauri/target/release/bundle/nsis"
+          $setup = Get-ChildItem $nsisDir -Filter "*-setup.exe" | Select-Object -First 1
+          if (-not $setup) { throw "No *-setup.exe in $nsisDir" }
+          $sig = Get-Item ($setup.FullName + ".sig")
+          Add-Content -Path $env:GITHUB_OUTPUT -Encoding ascii "SETUP_PATH=$($setup.FullName)"
+          Add-Content -Path $env:GITHUB_OUTPUT -Encoding ascii "SETUP_NAME=$($setup.Name)"
+          Add-Content -Path $env:GITHUB_OUTPUT -Encoding ascii "SIG_PATH=$($sig.FullName)"
+
+      - name: Strip semver v prefix for manifest
+        id: ver
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -match '^v(.+)$') { $v = $Matches[1] } else { $v = $tag }
+          Add-Content -Path $env:GITHUB_OUTPUT -Encoding ascii "VERSION=$v"
+
+      - name: Write update.json (static manifest for Tauri updater)
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.ver.outputs.VERSION }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+          SETUP_NAME: ${{ steps.bundle.outputs.SETUP_NAME }}
+          SIG_PATH: ${{ steps.bundle.outputs.SIG_PATH }}
+        run: |
+          $url = "https://github.com/$env:REPO/releases/download/$env:TAG/$env:SETUP_NAME"
+          $signature = (Get-Content -Raw $env:SIG_PATH).Trim()
+          $pubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+          $manifest = [ordered]@{
+            version = $env:VERSION
+            notes   = "Release $env:TAG"
+            pub_date = $pubDate
+            platforms = [ordered]@{
+              "windows-x86_64" = [ordered]@{
+                url = $url
+                signature = $signature
+              }
+            }
+          }
+          $json = $manifest | ConvertTo-Json -Depth 6
+          [System.IO.File]::WriteAllText((Join-Path $pwd "update.json"), $json, (New-Object System.Text.UTF8Encoding $false))
+          Get-Content update.json
+
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            ${{ steps.bundle.outputs.SETUP_PATH }}
+            ${{ steps.bundle.outputs.SIG_PATH }}
+            update.json
