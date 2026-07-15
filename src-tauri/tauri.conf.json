@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Hue",
-  "version": "0.1.1",
+  "version": "1.1.0",
   "identifier": "com.takum.hue",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -50,7 +50,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVFNEFDNjc5QUVDQTIxRDIKUldUU0ljcXVlY1pLN3JvUllhTFNnd1dLaElMa1RQWG9kejlaUjgrdUUxY2NLVjMwK2pXMnIyWnoK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc1NEJEQ0NDOTJERjAyRDQKUldUVUF0K1N6TnhMZGR4dUF3MFhJT2loR2tETzhFMjhtVGhJbjFxaUt0cWFGNFdNVnd2dm4veTEK",
       "endpoints": [
         "https://github.com/diny-hou/Hue/releases/latest/download/update.json"
       ],

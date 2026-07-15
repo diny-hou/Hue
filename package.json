@@ -1,14 +1,17 @@
 {
   "name": "hue",
   "private": true,
-  "version": "0.1.1",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:build:local-updater": "tauri build --config src-tauri/tauri.updater-local.json",
+    "tauri:build:local-updater": "scripts\\build-local-updater.bat",
+    "update": "scripts\\hue-update.bat",
+    "build:update": "scripts\\hue-update.bat",
+    "update:app": "scripts\\hue-update.bat",
     "build:exe": "tauri build --config src-tauri/tauri.build-no-sign.json"
   },
   "dependencies": {

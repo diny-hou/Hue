@@ -47,11 +47,21 @@ Build-time env vars (not read from `.env` by Tauri CLI):
 | `TAURI_SIGNING_PRIVATE_KEY_PATH` | Path to private key file |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Key password, if any |
 
-Local signed build (PowerShell):
+Local signed build — `tauri build` reads **`TAURI_SIGNING_PRIVATE_KEY`** (file path or key string).  
+`TAURI_SIGNING_PRIVATE_KEY_PATH` is only for `tauri signer sign`, not for `tauri build`.
+
+```bat
+REM easiest (cmd):
+scripts\build-local-updater.bat
+
+REM or manually:
+set TAURI_SIGNING_PRIVATE_KEY=%CD%\src-tauri\.keys\hue.key
+npm run tauri -- build --config src-tauri/tauri.updater-local.json
+```
 
 ```powershell
-$env:TAURI_SIGNING_PRIVATE_KEY_PATH = "X:\Product\Hue\src-tauri\.keys\hue.key"
-npm run tauri build
+$env:TAURI_SIGNING_PRIVATE_KEY = "$PWD\src-tauri\.keys\hue.key"
+npm run tauri -- build --config src-tauri/tauri.updater-local.json
 ```
 
 ## 2. GitHub Secrets (diny-hou/Hue)
@@ -89,7 +99,24 @@ Creates a **prerelease** tagged `daybuild-YYYYMMDD-<sha>`. Does not change `late
 
 ## 5. Local updater testing
 
-Tauri does not use `file://` manifests. Serve over HTTP — see previous sections in this doc for `tauri.updater-local.json` and `npm run tauri:build:local-updater`.
+Single menu (`npm run update`):
+
+| # | Action |
+|---|--------|
+| 1 | Product build → `dist-update/product/` (port 8080) |
+| 2 | Daily build → `dist-update/daily/` (port 8081) |
+| 3 | Update installed app (product) |
+| 4 | Update installed app (daily) |
+
+```bat
+npm run update
+npm run update -- 1
+npm run update -- 4
+```
+
+Daily builds auto-version as `{package.json version}-daily.{YYYYMMDD}.{n}`.
+
+Installed app must use the **same channel** as the update (product ↔ product, daily ↔ daily).
 
 ## 6. Frontend behavior
 
