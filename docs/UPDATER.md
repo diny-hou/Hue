@@ -25,7 +25,7 @@ Installed apps call this URL on startup (production builds only). **Daybuild** p
 | [`src-tauri/tauri.updater-local.json`](../src-tauri/tauri.updater-local.json) | Merge config for **local HTTP** testing |
 | [`src-tauri/capabilities/updater.json`](../src-tauri/capabilities/updater.json) | `updater:default` + `process:default` on **`main`** window only |
 | [`src-tauri/.keys/`](../src-tauri/.keys/) | **Gitignored** — signing keys (never commit) |
-| [`src/components/UpdatePrompt.tsx`](../src/components/UpdatePrompt.tsx) | Startup check UI (production builds only) |
+| [`src/components/UpdateDialog.tsx`](../src/components/UpdateDialog.tsx) | Download progress modal (Preferences, production builds only) |
 
 ## 1. Generate signing keys
 
@@ -120,8 +120,9 @@ Installed app must use the **same channel** as the update (product ↔ product, 
 
 ## 6. Frontend behavior
 
-- [`UpdatePrompt`](../src/components/UpdatePrompt.tsx) runs `check()` only when `import.meta.env.PROD` is true.
-- User flow: **Later** / **Install and restart** → `downloadAndInstall` → `relaunch()`.
+- Preferences → **Advanced** → **Check for updates** runs `check()` only when `import.meta.env.PROD` is true.
+- If an update exists: progress modal → `downloadAndInstall` → automatic `relaunch()`.
+- If already current: inline “You are on the latest version.”
 
 ## Checklist before first public release
 

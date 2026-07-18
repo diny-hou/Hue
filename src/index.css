@@ -1035,6 +1035,10 @@ body {
 
 .update-prompt-progress-wrap {
   margin-top: 8px;
+  overflow: hidden;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .update-prompt-progress-bar {
@@ -1042,6 +1046,20 @@ body {
   border-radius: 4px;
   background: var(--accent-color);
   transition: width 0.2s ease;
+}
+
+.update-prompt-progress-bar.indeterminate {
+  width: 40% !important;
+  animation: update-progress-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes update-progress-indeterminate {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
 }
 
 .update-prompt-progress-label {
@@ -1088,4 +1106,110 @@ body {
   margin: 0;
   font-size: 13px;
   color: #ff8a8a;
+}
+
+.pref-update-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex: 1;
+}
+
+.pref-update-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(91, 141, 239, 0.5);
+  background: rgba(91, 141, 239, 0.2);
+  color: #dbe8ff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.pref-update-btn:hover:not(:disabled) {
+  background: rgba(91, 141, 239, 0.35);
+  border-color: rgba(91, 141, 239, 0.75);
+}
+
+.pref-update-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.pref-update-status {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  text-align: right;
+}
+
+.pref-update-status.success {
+  color: #8fd4a0;
+}
+
+/* Gesture path debug overlay */
+.gesture-debug-trail {
+  stroke: #5bffb0;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.9;
+  filter: drop-shadow(0 0 4px rgba(91, 255, 176, 0.7));
+}
+
+.gesture-debug-cursor {
+  fill: #5bffb0;
+  stroke: #0a1a12;
+  stroke-width: 2;
+}
+
+.gesture-debug-ring {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+  opacity: 0.55;
+}
+
+.gesture-debug-ring.dead {
+  stroke: #ff6b6b;
+}
+
+.gesture-debug-ring.main-in,
+.gesture-debug-ring.main-out {
+  stroke: #8ab4ff;
+}
+
+.gesture-debug-ring.child-out,
+.gesture-debug-ring.child-pick {
+  stroke: #ffd166;
+}
+
+.gesture-debug-ring.grand-out,
+.gesture-debug-ring.grand-pick,
+.gesture-debug-ring.grand-pick-hybrid {
+  stroke: #c77dff;
+}
+
+.gesture-debug-hud {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  z-index: 50;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(91, 255, 176, 0.35);
+  color: #e8fff3;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  pointer-events: none;
+}
+
+.gesture-debug-hud-hint {
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
 }

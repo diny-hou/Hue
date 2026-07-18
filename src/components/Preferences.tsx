@@ -3,7 +3,9 @@ import { getName, getTauriVersion, getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isEnabled, enable, disable } from '@tauri-apps/plugin-autostart';
-import { MenuConfig } from './PieMenu'; // Will export MenuConfig from PieMenu.tsx shortly
+import { MenuConfig } from './PieMenu';
+import { UpdateDialog } from './UpdateDialog';
+import { useAppUpdater } from '../hooks/useAppUpdater';
 
 export const StandalonePreferences: React.FC = () => {
     const [config, setConfig] = useState<MenuConfig | null>(null);
@@ -63,6 +65,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     const [animType, setAnimType] = useState(config.appearance?.animation_type ?? 'spread');
     const [hoverScale, setHoverScale] = useState(config.appearance?.hover_scale ?? 'small');
     const [hoverAnim, setHoverAnim] = useState(config.appearance?.hover_animation || 'none');
+    const [gesturePathDebug, setGesturePathDebug] = useState(!!config.appearance?.gesture_path_debug);
 
     const [isRecording, setIsRecording] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -70,6 +73,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     const [appName, setAppName] = useState('Hue');
     const [appVersion, setAppVersion] = useState('…');
     const [tauriVersion, setTauriVersion] = useState('…');
+    const updater = useAppUpdater();
 
     useEffect(() => {
         isEnabled()
@@ -163,6 +167,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                     animation_type: animType,
                     hover_scale: hoverScale,
                     hover_animation: hoverAnim,
+                    gesture_path_debug: gesturePathDebug,
                 }
             };
             await invoke('update_config', { newConfig });
@@ -319,7 +324,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                             </div>
                         </div>
                         <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
-                            <label style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>Sub-panel Text</label>
+                            <label style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>Sub / Nested Text</label>
                         </div>
                         <div className="pref-row">
                             <label>Text Color</label>
@@ -363,7 +368,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                             </div>
                         </div>
                         <div className="pref-row">
-                            <label>Panel Opacity (Sub)</label>
+                            <label>Panel Opacity (Sub / Nested)</label>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <input
                                     type="range"
@@ -391,7 +396,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                             </div>
                         </div>
                         <div className="pref-row">
-                            <label>Sub-panel Hover Opacity</label>
+                            <label>Sub / Nested Hover Opacity</label>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <input
                                     type="range"
@@ -488,9 +493,56 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                             <label>Tauri</label>
                             <span className="pref-value">v{tauriVersion}</span>
                         </div>
+                        <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
+                            <label>Gesture Path Debug</label>
+                            <label className="toggle-switch">
+                                <input
+                                    type="checkbox"
+                                    checked={gesturePathDebug}
+                                    onChange={(e) => setGesturePathDebug(e.target.checked)}
+                                />
+                                <span className="slider round"></span>
+                            </label>
+                        </div>
+                        <div className="pref-row" style={{ marginTop: '4px' }}>
+                            <small style={{ color: '#aaa' }}>
+                                Show trail, ring thresholds, and lock HUD while dragging. Apply to enable.
+                            </small>
+                        </div>
+                        <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
+                            <label>Software Update</label>
+                            <div className="pref-update-actions">
+                                <button
+                                    type="button"
+                                    className="pref-update-btn"
+                                    onClick={() => void updater.runUpdate()}
+                                    disabled={updater.isBusy}
+                                >
+                                    {updater.phase === 'checking'
+                                        ? 'Checking…'
+                                        : updater.isBusy
+                                            ? 'Updating…'
+                                            : 'Check for updates'}
+                                </button>
+                                {updater.statusMessage && (
+                                    <p className={`pref-update-status${updater.phase === 'uptodate' ? ' success' : ''}`}>
+                                        {updater.statusMessage}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
                     </>
                 )}
             </div>
+
+            <UpdateDialog
+                phase={updater.phase}
+                update={updater.update}
+                downloaded={updater.downloaded}
+                contentLength={updater.contentLength}
+                error={updater.error}
+                onClose={updater.reset}
+            />
 
             <div className="preferences-footer">
                 <button className="pref-save" onClick={handleSave} disabled={saving || isRecording}>

@@ -17,6 +17,7 @@ export interface AppearanceConfig {
     sub_panel_hover_opacity?: number;
     sub_panel_text_size?: number;
     sub_panel_text_color?: string;
+    gesture_path_debug?: boolean;
 }
 
 export interface MenuConfig {
@@ -27,6 +28,11 @@ export interface MenuConfig {
 
 // Re-export type alias for internal use
 type MenuItem = SliceItem;
+
+function isGroupItem(item: MenuItem | undefined): boolean {
+    if (!item) return false;
+    return !item.path || (item.children?.length ?? 0) > 0;
+}
 
 const polarToCartesian = (centerX: number, centerY: number, radius: number, angleInDegrees: number) => {
     const angleInRadians = (angleInDegrees * Math.PI) / 180.0;
@@ -58,18 +64,35 @@ export const PieMenu: React.FC = () => {
     const [configFull, setConfigFull] = useState<MenuConfig | null>(null);
     const [activeIndex, setActiveIndex] = useState<number | null>(null);
     const [activeChildIndex, setActiveChildIndex] = useState<number | null>(null);
+    const [activeGrandchildIndex, setActiveGrandchildIndex] = useState<number | null>(null);
     const [isVisible, setIsVisible] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [editingChildIndex, setEditingChildIndex] = useState<number | null>(null);
+    const [editingGrandchildIndex, setEditingGrandchildIndex] = useState<number | null>(null);
     const [editingPos, setEditingPos] = useState<{ x: number; y: number } | null>(null);
     const isEditorOpenRef = React.useRef(false);
     const isPreferencesOpenRef = React.useRef(false);
     const hoveredIndexRef = React.useRef<number | null>(null);
-    const isParentLockedRef = React.useRef(false);
+    const lockLevelRef = React.useRef(0);
+    const lockedMainRef = React.useRef<number | null>(null);
+    const stickyChildRef = React.useRef<number | null>(null);
+    const stickyGrandRef = React.useRef<number | null>(null);
     const lastDistanceRef = React.useRef(0);
+    const lastAngleRef = React.useRef(0);
     const lastShowTimeRef = React.useRef(0);
     const clickThroughStateRef = React.useRef({ editorOpen: false, hitDiskRadius: 180 });
+    const trailRef = React.useRef<{ x: number; y: number }[]>([]);
+    const debugReviewTimerRef = React.useRef<number | null>(null);
+    const [gestureTrail, setGestureTrail] = useState<{ x: number; y: number }[]>([]);
+    const [debugHud, setDebugHud] = useState<{
+        lock: number;
+        dist: number;
+        angle: number;
+        main: number | null;
+        child: number | null;
+        grand: number | null;
+    } | null>(null);
 
     useEffect(() => {
         invoke<MenuConfig>('get_config')
@@ -107,6 +130,10 @@ export const PieMenu: React.FC = () => {
 
         const unlistenVisibility = (async () => {
             const l1 = await listen('menu-show', () => {
+                if (debugReviewTimerRef.current !== null) {
+                    window.clearTimeout(debugReviewTimerRef.current);
+                    debugReviewTimerRef.current = null;
+                }
                 setIsVisible(true);
                 lastShowTimeRef.current = Date.now();
             });
@@ -114,9 +141,16 @@ export const PieMenu: React.FC = () => {
                 if (isEditorOpenRef.current || isPreferencesOpenRef.current) return;
                 setIsVisible(false);
                 setIsDragging(false);
-                isParentLockedRef.current = false;
+                lockLevelRef.current = 0;
+                lockedMainRef.current = null;
+                stickyChildRef.current = null;
+                stickyGrandRef.current = null;
+                trailRef.current = [];
+                setGestureTrail([]);
+                setDebugHud(null);
                 updateActiveIndex(null);
                 setActiveChildIndex(null);
+                setActiveGrandchildIndex(null);
                 invoke('hide_menu').catch(console.error);
             });
             // Also reset on focus loss
@@ -129,9 +163,16 @@ export const PieMenu: React.FC = () => {
                 if (isEditorOpenRef.current || isPreferencesOpenRef.current) return;
                 setIsVisible(false);
                 setIsDragging(false);
-                isParentLockedRef.current = false;
+                lockLevelRef.current = 0;
+                lockedMainRef.current = null;
+                stickyChildRef.current = null;
+                stickyGrandRef.current = null;
+                trailRef.current = [];
+                setGestureTrail([]);
+                setDebugHud(null);
                 updateActiveIndex(null);
                 setActiveChildIndex(null);
+                setActiveGrandchildIndex(null);
             });
             const l4 = await listen('reload-config', () => {
                 invoke<MenuConfig>('get_config')
@@ -145,6 +186,7 @@ export const PieMenu: React.FC = () => {
                 isEditorOpenRef.current = false;
                 setEditingIndex(null);
                 setEditingChildIndex(null);
+                setEditingGrandchildIndex(null);
             });
             const l6 = await listen('preferences-opened', () => {
                 isPreferencesOpenRef.current = true;
@@ -204,10 +246,18 @@ export const PieMenu: React.FC = () => {
         };
     }, [isVisible]);
 
+    const updateActiveChildIndex = (index: number | null) => {
+        if (activeChildIndex !== index) {
+            setActiveGrandchildIndex(null);
+        }
+        setActiveChildIndex(index);
+    };
+
     // Update the activeIndex and hover proxy together
     const updateActiveIndex = (index: number | null) => {
         if (activeIndex !== index) {
-            setActiveChildIndex(null); // reset child when changing parent
+            setActiveChildIndex(null);
+            setActiveGrandchildIndex(null);
         }
         setActiveIndex(index);
         hoveredIndexRef.current = index;
@@ -226,162 +276,282 @@ export const PieMenu: React.FC = () => {
     const childInnerRadius = 180; // connect seamlessly with outerRadius
     const childOuterRadius = 300;
 
+    // Grandchild ring dimensions
+    const grandInnerRadius = 300;
+    const grandOuterRadius = 420;
+
     // We will display 8 children slots per parent in a full circle
     const maxChildrenVisible = 8;
     const childFanAngle = 360; // Total angle span is a full circle
     const childSliceAngle = childFanAngle / maxChildrenVisible;
     const childHalfSlice = childSliceAngle / 2;
 
+    const gestureDebug = !!configFull?.appearance?.gesture_path_debug;
+    const DEAD_ZONE = 40;
+
+    const pushTrailPoint = (x: number, y: number) => {
+        if (!gestureDebug) return;
+        const trail = trailRef.current;
+        const last = trail[trail.length - 1];
+        if (last) {
+            const dx = x - last.x;
+            const dy = y - last.y;
+            if (dx * dx + dy * dy < 9) return;
+        }
+        trail.push({ x, y });
+        if (trail.length > 400) trail.shift();
+        setGestureTrail([...trail]);
+    };
+
+    const syncSelectionFromSticky = () => {
+        updateActiveChildIndex(stickyChildRef.current);
+        setActiveGrandchildIndex(stickyGrandRef.current);
+    };
+
     const handlePointerDown = (e: React.PointerEvent) => {
-        if (e.button !== 0) return; // Only left-click
+        if (e.button !== 0) return;
         if (isEditorOpenRef.current) return;
         setIsDragging(true);
-        isParentLockedRef.current = false; // Reset lock on new drag
-        handlePointerMove(e); // Initialize angle calculation immediately if dragging starts off-center
+        lockLevelRef.current = 0;
+        lockedMainRef.current = null;
+        stickyChildRef.current = null;
+        stickyGrandRef.current = null;
+        trailRef.current = [];
+        setGestureTrail([]);
+        handlePointerMove(e);
     };
 
     const handlePointerMove = (e: React.PointerEvent) => {
         if (!isDragging) {
-            // If we are just moving the mouse without dragging in a Marking Menu,
-            // we typically don't highlight anything.
             return;
         }
 
         const rect = e.currentTarget.getBoundingClientRect();
-        // Mouse position relative to the center of the 400x400 container
-        const dx = e.clientX - rect.left - center;
-        const dy = e.clientY - rect.top - center;
+        // Map client coords into the 1000×1000 logical SVG space
+        const scale = size / rect.width;
+        const dx = (e.clientX - rect.left) * scale - center;
+        const dy = (e.clientY - rect.top) * scale - center;
         const distance = Math.sqrt(dx * dx + dy * dy);
         lastDistanceRef.current = distance;
 
-        // Intentionally require a minimum movement radius (e.g. 40px) to prevent accidental selection
-        // Do NOT unlock the parent if we cross the center! This allows UP -> CENTER -> DOWN gestures.
-        if (distance < 40) {
-            if (!isParentLockedRef.current) {
-                updateActiveIndex(null);
-            }
-            setActiveChildIndex(null);
-            return;
-        }
-
-        // SVG rotates -90 degrees, so visually top is angle 0.
-        // atan2 is standard math (0 is right, 90 is bottom).
-        // Let's calculate the angle in degrees relative to the visual layout.
-        // dx, dy -> atan2(dy, dx) -> radians. 
-        // Then we subtract 90 deg offset, and wrap to 0-360.
         let angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
-        // Adjust for the visual -90deg rotation in CSS
         angleDeg = (angleDeg + 90 + 360) % 360;
+        lastAngleRef.current = angleDeg;
 
-        // Sub-menu logic (is the current active index a group folder?)
-        const isActiveGroup = activeIndex !== null && (!items[activeIndex]?.path || (items[activeIndex]?.children?.length ?? 0) > 0);
+        pushTrailPoint(center + dx, center + dy);
 
-        // Calculate theoretical main index if we weren't locked
         const adjusted = (angleDeg + halfSlice) % 360;
         const potentialMainIndex = Math.floor(adjusted / sliceAngle);
+        const childAdjusted = (angleDeg + childHalfSlice) % 360;
+        const potentialChildIndex = Math.floor(childAdjusted / childSliceAngle);
+        const potentialGrandIndex = potentialChildIndex;
 
-        if (!isParentLockedRef.current) {
-            // We are not locked to a parent sub-menu yet
-            if (potentialMainIndex >= 0 && potentialMainIndex < items.length) {
+        // ── Level 0: free main selection; lock into a group when entering its ring ──
+        if (lockLevelRef.current === 0) {
+            if (distance < DEAD_ZONE) {
+                updateActiveIndex(null);
+                lockedMainRef.current = null;
+            } else if (potentialMainIndex >= 0 && potentialMainIndex < items.length) {
                 updateActiveIndex(potentialMainIndex);
-            }
-
-            // If the user crosses the inner threshold into a group slice, lock it!
-            if (isActiveGroup && distance >= innerRadius) {
-                isParentLockedRef.current = true;
+                const main = items[potentialMainIndex];
+                if (isGroupItem(main) && distance >= innerRadius) {
+                    lockedMainRef.current = potentialMainIndex;
+                    lockLevelRef.current = 1;
+                }
             }
         }
 
-        // If locked (or just entered the locking threshold), ONLY process child ring interactions
-        if (isParentLockedRef.current) {
-            // For Hybrid group (has path and children), require distance > 140 to select a child.
-            // For pure Folder (children only), we only need to pass the dead zone (distance > 70).
-            const hasPath = activeIndex !== null ? !!items[activeIndex]?.path : false;
-            const childThreshold = hasPath ? 140 : 70;
+        const lockedMain = lockedMainRef.current;
 
-            if (distance >= childThreshold) {
-                // Full circular sub-menu mapping (8 directions)
-                const childAdjusted = (angleDeg + childHalfSlice) % 360;
-                const childIndex = Math.floor(childAdjusted / childSliceAngle);
+        // ── Level 1: parent locked; sticky child; inward returns to parent band ──
+        if (lockLevelRef.current === 1 && lockedMain !== null) {
+            const mainHasPath = !!items[lockedMain]?.path;
+            const childPickMin = mainHasPath ? 140 : 70;
 
-                if (childIndex >= 0 && childIndex < maxChildrenVisible) {
-                    setActiveChildIndex(childIndex);
-                } else {
-                    setActiveChildIndex(null);
-                }
+            if (distance < DEAD_ZONE) {
+                lockLevelRef.current = 0;
+                lockedMainRef.current = null;
+                stickyChildRef.current = null;
+                stickyGrandRef.current = null;
+                syncSelectionFromSticky();
+            } else if (distance < childPickMin) {
+                stickyChildRef.current = null;
+                stickyGrandRef.current = null;
+                syncSelectionFromSticky();
             } else {
-                // Inside parent ring but hasn't reached child threshold
-                setActiveChildIndex(null);
+                if (stickyChildRef.current === null
+                    && potentialChildIndex >= 0
+                    && potentialChildIndex < maxChildrenVisible) {
+                    stickyChildRef.current = potentialChildIndex;
+                }
+                stickyGrandRef.current = null;
+                syncSelectionFromSticky();
+
+                const childItem = stickyChildRef.current !== null
+                    ? items[lockedMain]?.children?.[stickyChildRef.current]
+                    : undefined;
+                if (isGroupItem(childItem)) {
+                    const childHasPath = !!childItem?.path;
+                    const grandPickMin = childHasPath ? 340 : 300;
+                    if (distance >= grandPickMin) {
+                        lockLevelRef.current = 2;
+                    }
+                }
             }
+        }
+
+        // ── Level 2: child locked; sticky grandchild; inward returns to child ──
+        if (lockLevelRef.current === 2 && lockedMain !== null && stickyChildRef.current !== null) {
+            const childItem = items[lockedMain]?.children?.[stickyChildRef.current];
+            const childHasPath = !!childItem?.path;
+            const grandPickMin = childHasPath ? 340 : 300;
+            const childPickMin = !!items[lockedMain]?.path ? 140 : 70;
+
+            if (distance < DEAD_ZONE) {
+                lockLevelRef.current = 0;
+                lockedMainRef.current = null;
+                stickyChildRef.current = null;
+                stickyGrandRef.current = null;
+                syncSelectionFromSticky();
+            } else if (distance < childPickMin) {
+                lockLevelRef.current = 1;
+                stickyChildRef.current = null;
+                stickyGrandRef.current = null;
+                syncSelectionFromSticky();
+            } else if (distance < grandPickMin) {
+                lockLevelRef.current = 1;
+                stickyGrandRef.current = null;
+                syncSelectionFromSticky();
+            } else {
+                if (stickyGrandRef.current === null
+                    && potentialGrandIndex >= 0
+                    && potentialGrandIndex < maxChildrenVisible) {
+                    stickyGrandRef.current = potentialGrandIndex;
+                }
+                syncSelectionFromSticky();
+            }
+        }
+
+        if (gestureDebug) {
+            setDebugHud({
+                lock: lockLevelRef.current,
+                dist: Math.round(distance),
+                angle: Math.round(angleDeg),
+                main: lockedMainRef.current ?? hoveredIndexRef.current,
+                child: stickyChildRef.current,
+                grand: stickyGrandRef.current,
+            });
         }
     };
 
     const handlePointerUp = (e: React.PointerEvent) => {
-        if (e.button !== 0) return; // Only left-click
+        if (e.button !== 0) return;
         if (!isDragging) return;
         if (isEditorOpenRef.current) return;
         setIsDragging(false);
-        isParentLockedRef.current = false; // Reset lock on release
 
-        if (activeIndex !== null) {
-            const currentItem = configRef.current[activeIndex];
+        const launchChild = stickyChildRef.current;
+        const launchGrand = stickyGrandRef.current;
+        const launchMain = lockedMainRef.current ?? activeIndex;
 
-            // If user releases the mouse in the center dead zone, cancel the interaction entirely.
-            if (lastDistanceRef.current < 40) {
-                // Canceled
-            } else if (activeChildIndex !== null && currentItem.children && currentItem.children.length > activeChildIndex) {
-                const childItem = currentItem.children[activeChildIndex];
-                // Only launch if the child actually has a path configured
+        lockLevelRef.current = 0;
+        lockedMainRef.current = null;
+        stickyChildRef.current = null;
+        stickyGrandRef.current = null;
+
+        if (launchMain !== null) {
+            const currentItem = configRef.current[launchMain];
+
+            if (lastDistanceRef.current < DEAD_ZONE) {
+                // Canceled in center
+            } else if (
+                launchChild !== null &&
+                launchGrand !== null &&
+                currentItem.children &&
+                currentItem.children.length > launchChild
+            ) {
+                const childItem = currentItem.children[launchChild];
+                const grandItem = childItem.children?.[launchGrand];
+                if (grandItem?.path) {
+                    invoke('launch_app', { path: grandItem.path }).catch(console.error);
+                } else if (childItem.path) {
+                    invoke('launch_app', { path: childItem.path }).catch(console.error);
+                }
+            } else if (launchChild !== null && currentItem.children && currentItem.children.length > launchChild) {
+                const childItem = currentItem.children[launchChild];
                 if (childItem.path) {
-                    invoke('launch_app', {
-                        path: childItem.path,
-                    }).catch(console.error);
+                    invoke('launch_app', { path: childItem.path }).catch(console.error);
                 }
-            } else {
-                // We clicked the parent directly. If it has a path, launch it!
-                if (currentItem.path) {
-                    invoke('launch_app', {
-                        path: currentItem.path,
-                    }).catch(console.error);
-                }
+            } else if (currentItem.path) {
+                invoke('launch_app', { path: currentItem.path }).catch(console.error);
             }
         }
 
-        // Hide the menu and reset state
+        if (gestureDebug && trailRef.current.length > 0) {
+            // Keep trail + HUD visible briefly so the path can be inspected
+            if (debugReviewTimerRef.current !== null) {
+                window.clearTimeout(debugReviewTimerRef.current);
+            }
+            debugReviewTimerRef.current = window.setTimeout(() => {
+                debugReviewTimerRef.current = null;
+                trailRef.current = [];
+                setGestureTrail([]);
+                setDebugHud(null);
+                setIsVisible(false);
+                updateActiveIndex(null);
+                updateActiveChildIndex(null);
+                setActiveGrandchildIndex(null);
+                invoke('hide_menu').catch(console.error);
+            }, 2800);
+            return;
+        }
+
+        trailRef.current = [];
+        setGestureTrail([]);
+        setDebugHud(null);
         setIsVisible(false);
         updateActiveIndex(null);
-        setActiveChildIndex(null);
+        updateActiveChildIndex(null);
+        setActiveGrandchildIndex(null);
         invoke('hide_menu').catch(console.error);
     };
 
     // Use onContextMenu to prevent the right-click menu, allowing drag with both left/right click.
     const handleContextMenu = (_e: React.MouseEvent) => _e.preventDefault();
 
-    const handleOpenEditor = (index: number, childIdx: number | null = null) => {
+    const handleOpenEditor = (index: number, childIdx: number | null = null, grandchildIdx: number | null = null) => {
         setEditingIndex(index);
         setEditingChildIndex(childIdx);
+        setEditingGrandchildIndex(grandchildIdx);
 
-        if (childIdx !== null) {
-            const midAngle = childIdx * childSliceAngle;
-
+        if (grandchildIdx !== null && childIdx !== null) {
+            const midAngle = grandchildIdx * childSliceAngle;
             const angleInRadians = ((midAngle - 90) * Math.PI) / 180.0;
-            const outRadius = childOuterRadius + 80;
+            const outRadius = grandOuterRadius + 80;
             let spawnX = center + outRadius * Math.cos(angleInRadians);
             let spawnY = center + outRadius * Math.sin(angleInRadians);
-
-            // Keep the popup securely within bounds
             spawnX = Math.max(200, Math.min(800, spawnX));
             spawnY = Math.max(280, Math.min(720, spawnY));
-
             setEditingPos({ x: spawnX, y: spawnY });
             isEditorOpenRef.current = true;
             return;
         }
 
-        // midAngle is the visual center of the slice (on a cardinal direction)
+        if (childIdx !== null) {
+            const midAngle = childIdx * childSliceAngle;
+            const angleInRadians = ((midAngle - 90) * Math.PI) / 180.0;
+            const outRadius = childOuterRadius + 80;
+            let spawnX = center + outRadius * Math.cos(angleInRadians);
+            let spawnY = center + outRadius * Math.sin(angleInRadians);
+            spawnX = Math.max(200, Math.min(800, spawnX));
+            spawnY = Math.max(280, Math.min(720, spawnY));
+            setEditingPos({ x: spawnX, y: spawnY });
+            isEditorOpenRef.current = true;
+            return;
+        }
+
         const midAngle = index * sliceAngle;
         const textRadius = innerRadius + (outerRadius - innerRadius) / 2;
-        // Transform polar to cartesian
         const angleInRadians = ((midAngle - 90) * Math.PI) / 180.0;
         const x = center + textRadius * Math.cos(angleInRadians);
         const y = center + textRadius * Math.sin(angleInRadians);
@@ -390,12 +560,10 @@ export const PieMenu: React.FC = () => {
         const cy = y - center;
         const length = Math.sqrt(cx * cx + cy * cy);
 
-        // Push the spawn point outward
         const outRadius = outerRadius + 80;
         let spawnX = center + (cx / length) * outRadius;
         let spawnY = center + (cy / length) * outRadius;
 
-        // Keep the popup securely within bounds
         spawnX = Math.max(200, Math.min(800, spawnX));
         spawnY = Math.max(280, Math.min(720, spawnY - 40));
 
@@ -434,8 +602,23 @@ export const PieMenu: React.FC = () => {
     const isGroupOpen =
         activeIndex !== null &&
         !!items[activeIndex] &&
-        (!items[activeIndex].path || (items[activeIndex].children && items[activeIndex].children!.length > 0));
-    const hitDiskRadius = isGroupOpen ? childOuterRadius : outerRadius;
+        isGroupItem(items[activeIndex]);
+
+    const activeChildItem =
+        activeIndex !== null && activeChildIndex !== null
+            ? items[activeIndex]?.children?.[activeChildIndex]
+            : undefined;
+
+    const isGrandGroupOpen =
+        isGroupOpen &&
+        activeChildIndex !== null &&
+        isGroupItem(activeChildItem);
+
+    const hitDiskRadius = isGrandGroupOpen
+        ? grandOuterRadius
+        : isGroupOpen
+            ? childOuterRadius
+            : outerRadius;
 
     clickThroughStateRef.current = {
         editorOpen: editingIndex !== null,
@@ -465,6 +648,35 @@ export const PieMenu: React.FC = () => {
                     r={hitDiskRadius}
                     fill="rgba(0,0,0,0.01)"
                 />
+                {gestureDebug && (
+                    <g className="gesture-debug-rings" pointerEvents="none">
+                        <circle cx={center} cy={center} r={DEAD_ZONE} className="gesture-debug-ring dead" />
+                        <circle cx={center} cy={center} r={innerRadius} className="gesture-debug-ring main-in" />
+                        <circle cx={center} cy={center} r={outerRadius} className="gesture-debug-ring main-out" />
+                        <circle cx={center} cy={center} r={childOuterRadius} className="gesture-debug-ring child-out" />
+                        <circle cx={center} cy={center} r={grandOuterRadius} className="gesture-debug-ring grand-out" />
+                        <circle cx={center} cy={center} r={140} className="gesture-debug-ring child-pick" />
+                        <circle cx={center} cy={center} r={300} className="gesture-debug-ring grand-pick" />
+                        <circle cx={center} cy={center} r={340} className="gesture-debug-ring grand-pick-hybrid" />
+                    </g>
+                )}
+                {gestureDebug && gestureTrail.length > 1 && (
+                    <polyline
+                        className="gesture-debug-trail"
+                        fill="none"
+                        points={gestureTrail.map(p => `${p.x},${p.y}`).join(' ')}
+                        pointerEvents="none"
+                    />
+                )}
+                {gestureDebug && gestureTrail.length > 0 && (
+                    <circle
+                        className="gesture-debug-cursor"
+                        cx={gestureTrail[gestureTrail.length - 1].x}
+                        cy={gestureTrail[gestureTrail.length - 1].y}
+                        r={6}
+                        pointerEvents="none"
+                    />
+                )}
                 {items.map((_item, index) => {
                     const startAngle = index * sliceAngle - halfSlice;
                     // small gap between slices for aesthetics
@@ -473,7 +685,9 @@ export const PieMenu: React.FC = () => {
                     const pathD = describeArc(center, center, innerRadius, outerRadius, startAngle, endAngle);
 
                     let isActive = false;
-                    if (isGroupOpen) {
+                    if (isGrandGroupOpen) {
+                        isActive = activeGrandchildIndex === index;
+                    } else if (isGroupOpen) {
                         isActive = activeChildIndex === index;
                     } else {
                         isActive = activeIndex === index;
@@ -484,12 +698,20 @@ export const PieMenu: React.FC = () => {
                             key={index}
                             d={pathD}
                             className={`slice-path ${isActive ? 'active' : ''} ${hoverAnimClass}`}
-                            style={{ opacity: isGroupOpen && activeIndex !== index && activeChildIndex !== index ? 0.3 : undefined }}
+                            style={{
+                                opacity:
+                                    (isGroupOpen && activeIndex !== index && activeChildIndex !== index && !isGrandGroupOpen) ||
+                                    (isGrandGroupOpen && activeChildIndex !== index && activeGrandchildIndex !== index)
+                                        ? 0.3
+                                        : undefined,
+                            }}
                             onContextMenu={e => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                if (isGroupOpen) {
-                                    handleOpenEditor(activeIndex, index);
+                                if (isGrandGroupOpen) {
+                                    handleOpenEditor(activeIndex!, activeChildIndex!, index);
+                                } else if (isGroupOpen) {
+                                    handleOpenEditor(activeIndex!, index);
                                 } else {
                                     handleOpenEditor(index);
                                 }
@@ -501,12 +723,11 @@ export const PieMenu: React.FC = () => {
                 {activeIndex !== null && (() => {
                     const currentItem = items[activeIndex];
                     if (!currentItem) return null;
-                    const isGroup = !currentItem.path || (currentItem.children && currentItem.children.length > 0);
-                    if (!isGroup) return null;
+                    if (!isGroupItem(currentItem)) return null;
 
                     return Array.from({ length: maxChildrenVisible }).map((_, idx) => {
                         const startAngle = idx * childSliceAngle - childHalfSlice;
-                        const endAngle = startAngle + childSliceAngle - 2; // gap for aesthetics
+                        const endAngle = startAngle + childSliceAngle - 2;
                         const pathD = describeArc(center, center, childInnerRadius, childOuterRadius, startAngle, endAngle);
                         const isChildActive = activeChildIndex === idx;
 
@@ -515,10 +736,38 @@ export const PieMenu: React.FC = () => {
                                 key={`child-${activeIndex}-${idx}`}
                                 d={pathD}
                                 className={`slice-path outer-slice ${isChildActive ? 'active' : ''} ${hoverAnimClass}`}
+                                style={{
+                                    opacity: isGrandGroupOpen && activeChildIndex !== idx ? 0.3 : undefined,
+                                }}
                                 onContextMenu={e => {
                                     e.preventDefault();
                                     e.stopPropagation();
                                     handleOpenEditor(activeIndex, idx);
+                                }}
+                            />
+                        );
+                    });
+                })()}
+                {/* ── Grandchild ring ── */}
+                {isGrandGroupOpen && activeIndex !== null && activeChildIndex !== null && (() => {
+                    const childItem = items[activeIndex]?.children?.[activeChildIndex];
+                    if (!childItem || !isGroupItem(childItem)) return null;
+
+                    return Array.from({ length: maxChildrenVisible }).map((_, idx) => {
+                        const startAngle = idx * childSliceAngle - childHalfSlice;
+                        const endAngle = startAngle + childSliceAngle - 2;
+                        const pathD = describeArc(center, center, grandInnerRadius, grandOuterRadius, startAngle, endAngle);
+                        const isGrandActive = activeGrandchildIndex === idx;
+
+                        return (
+                            <path
+                                key={`grand-${activeIndex}-${activeChildIndex}-${idx}`}
+                                d={pathD}
+                                className={`slice-path outer-slice ${isGrandActive ? 'active' : ''} ${hoverAnimClass}`}
+                                onContextMenu={e => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleOpenEditor(activeIndex, activeChildIndex, idx);
                                 }}
                             />
                         );
@@ -530,8 +779,7 @@ export const PieMenu: React.FC = () => {
             {activeIndex !== null && (() => {
                 const currentItem = items[activeIndex];
                 if (!currentItem) return null;
-                const isGroup = !currentItem.path || (currentItem.children && currentItem.children.length > 0);
-                if (!isGroup) return null;
+                if (!isGroupItem(currentItem)) return null;
 
                 return Array.from({ length: maxChildrenVisible }).map((_, idx) => {
                     const child = currentItem.children?.[idx];
@@ -544,12 +792,21 @@ export const PieMenu: React.FC = () => {
 
                     const childName = child?.name ? child.name : "＋";
                     const isPlaceholder = !child?.name;
+                    const childIsGroup = isGroupItem(child);
 
                     return (
                         <div
                             key={`child-label-${activeIndex}-${idx}`}
                             className="slice-content outer-label"
-                            style={{ left: `${x}px`, top: `${y}px`, opacity: isPlaceholder ? 0.3 : 1 }}
+                            style={{
+                                left: `${x}px`,
+                                top: `${y}px`,
+                                opacity: isGrandGroupOpen && activeChildIndex !== idx
+                                    ? 0.3
+                                    : isPlaceholder
+                                        ? 0.3
+                                        : 1,
+                            }}
                             onPointerDown={e => {
                                 if (e.button === 2) e.stopPropagation();
                             }}
@@ -563,6 +820,51 @@ export const PieMenu: React.FC = () => {
                             }}
                         >
                             {childName}
+                            {childIsGroup && (
+                                <div style={{ fontSize: '12px', lineHeight: 1, marginTop: '2px', color: 'rgba(255,255,255,0.4)', opacity: activeChildIndex === idx ? 1 : 0.5 }}>
+                                    •••
+                                </div>
+                            )}
+                        </div>
+                    );
+                });
+            })()}
+
+            {/* Grandchild labels */}
+            {isGrandGroupOpen && activeIndex !== null && activeChildIndex !== null && (() => {
+                const childItem = items[activeIndex]?.children?.[activeChildIndex];
+                if (!childItem) return null;
+
+                return Array.from({ length: maxChildrenVisible }).map((_, idx) => {
+                    const grand = childItem.children?.[idx];
+                    const midAngle = idx * childSliceAngle;
+
+                    const textRadius = grandInnerRadius + (grandOuterRadius - grandInnerRadius) / 2;
+                    const angleInRadians = ((midAngle - 90) * Math.PI) / 180.0;
+                    const x = center + textRadius * Math.cos(angleInRadians);
+                    const y = center + textRadius * Math.sin(angleInRadians);
+
+                    const grandName = grand?.name ? grand.name : "＋";
+                    const isPlaceholder = !grand?.name;
+
+                    return (
+                        <div
+                            key={`grand-label-${activeIndex}-${activeChildIndex}-${idx}`}
+                            className="slice-content outer-label"
+                            style={{ left: `${x}px`, top: `${y}px`, opacity: isPlaceholder ? 0.3 : 1 }}
+                            onPointerDown={e => {
+                                if (e.button === 2) e.stopPropagation();
+                            }}
+                            onPointerUp={e => {
+                                if (e.button === 2) e.stopPropagation();
+                            }}
+                            onContextMenu={e => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleOpenEditor(activeIndex, activeChildIndex, idx);
+                            }}
+                        >
+                            {grandName}
                         </div>
                     );
                 });
@@ -593,15 +895,17 @@ export const PieMenu: React.FC = () => {
                         onContextMenu={e => {
                             e.preventDefault();
                             e.stopPropagation();
-                            if (isGroupOpen) {
-                                handleOpenEditor(activeIndex, index);
+                            if (isGrandGroupOpen) {
+                                handleOpenEditor(activeIndex!, activeChildIndex!, index);
+                            } else if (isGroupOpen) {
+                                handleOpenEditor(activeIndex!, index);
                             } else {
                                 handleOpenEditor(index);
                             }
                         }}
                     >
                         {item.name}
-                        {((!item.path && item.path === '') || (item.children && item.children.length > 0)) && (
+                        {isGroupItem(item) && (
                             <div style={{ fontSize: '14px', lineHeight: 1, marginTop: '2px', color: 'rgba(255,255,255,0.4)', opacity: activeIndex === index ? 1 : 0.5 }}>
                                 •••
                             </div>
@@ -624,22 +928,60 @@ export const PieMenu: React.FC = () => {
                 <div className="center-text">HUE</div>
             </div>
 
-            {editingIndex !== null && editingPos && items[editingIndex] && (
+            {gestureDebug && debugHud && (
+                <div className="gesture-debug-hud" style={{ pointerEvents: 'none' }}>
+                    <div>lock {debugHud.lock} · dist {debugHud.dist} · ang {debugHud.angle}°</div>
+                    <div>main {debugHud.main ?? '—'} · child {debugHud.child ?? '—'} · grand {debugHud.grand ?? '—'}</div>
+                    <div className="gesture-debug-hud-hint">sticky path · inward = back</div>
+                </div>
+            )}
+
+            {editingIndex !== null && editingPos && items[editingIndex] && (() => {
+                const editingItem =
+                    editingGrandchildIndex !== null && editingChildIndex !== null
+                        ? (items[editingIndex].children?.[editingChildIndex]?.children?.[editingGrandchildIndex]
+                            || { name: '', path: '', children: [] })
+                        : editingChildIndex !== null
+                            ? (items[editingIndex].children?.[editingChildIndex]
+                                || { name: '', path: '', children: [] })
+                            : items[editingIndex];
+
+                const editorKey = editingGrandchildIndex !== null
+                    ? `editor-${editingIndex}-${editingChildIndex}-${editingGrandchildIndex}`
+                    : editingChildIndex !== null
+                        ? `editor-${editingIndex}-${editingChildIndex}`
+                        : `editor-${editingIndex}-main`;
+
+                return (
                 <SliceEditor
-                    key={`editor-${editingIndex}-${editingChildIndex || 'main'}`}
-                    item={editingChildIndex !== null
-                        ? (items[editingIndex].children?.[editingChildIndex] || { name: '', path: '', children: [] })
-                        : items[editingIndex]
-                    }
+                    key={editorKey}
+                    item={editingItem}
                     position={editingPos}
-                    allowChildren={editingChildIndex === null}
+                    allowChildren={editingGrandchildIndex === null}
+                    addChildrenLabel={editingChildIndex !== null ? '+ Add nested items' : '+ Add sub-items'}
+                    groupChildrenLabel={editingChildIndex !== null ? 'Nested Items (8 Slots)' : 'Group Items (8 Slots)'}
                     onSave={(updatedItem: SliceItem) => {
                         const newItems = [...items];
 
-                        if (editingChildIndex !== null) {
+                        if (editingGrandchildIndex !== null && editingChildIndex !== null) {
                             const parent = { ...newItems[editingIndex] };
                             const newChildren = [...(parent.children || [])];
-                            // Pad children if the index is out of bounds
+                            while (newChildren.length <= editingChildIndex) {
+                                newChildren.push({ name: '', path: '', children: [] });
+                            }
+                            const child = { ...newChildren[editingChildIndex] };
+                            const newGrandchildren = [...(child.children || [])];
+                            while (newGrandchildren.length <= editingGrandchildIndex) {
+                                newGrandchildren.push({ name: '', path: '', children: [] });
+                            }
+                            newGrandchildren[editingGrandchildIndex] = updatedItem;
+                            child.children = newGrandchildren;
+                            newChildren[editingChildIndex] = child;
+                            parent.children = newChildren;
+                            newItems[editingIndex] = parent;
+                        } else if (editingChildIndex !== null) {
+                            const parent = { ...newItems[editingIndex] };
+                            const newChildren = [...(parent.children || [])];
                             while (newChildren.length <= editingChildIndex) {
                                 newChildren.push({ name: '', path: '', children: [] });
                             }
@@ -656,15 +998,18 @@ export const PieMenu: React.FC = () => {
                         if (configFull) setConfigFull(newConfig);
                         setEditingIndex(null);
                         setEditingChildIndex(null);
+                        setEditingGrandchildIndex(null);
                         isEditorOpenRef.current = false;
                     }}
                     onCancel={() => {
                         setEditingIndex(null);
                         setEditingChildIndex(null);
+                        setEditingGrandchildIndex(null);
                         isEditorOpenRef.current = false;
                     }}
                 />
-            )}
+                );
+            })()}
         </div>
     );
 };

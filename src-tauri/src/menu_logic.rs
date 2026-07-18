@@ -25,6 +25,8 @@ pub struct AppearanceConfig {
     pub sub_panel_text_size: f32,
     #[serde(default = "default_text_color")]
     pub sub_panel_text_color: String,
+    #[serde(default)]
+    pub gesture_path_debug: bool,
 }
 
 fn default_hover_animation() -> String {
@@ -71,6 +73,7 @@ impl Default for AppearanceConfig {
             sub_panel_hover_opacity: default_sub_panel_hover_opacity(),
             sub_panel_text_size: default_sub_panel_text_size(),
             sub_panel_text_color: default_text_color(),
+            gesture_path_debug: false,
         }
     }
 }

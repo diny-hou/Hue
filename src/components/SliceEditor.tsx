@@ -11,8 +11,10 @@ export interface SliceItem {
 interface SliceEditorProps {
     item: SliceItem;
     position: { x: number; y: number };
-    /** Top-level slices can own a child ring; nested editors cannot. */
+    /** When false, nested children cannot be edited (e.g. grandchild depth). */
     allowChildren?: boolean;
+    addChildrenLabel?: string;
+    groupChildrenLabel?: string;
     onSave: (item: SliceItem) => void;
     onCancel: () => void;
 }
@@ -29,6 +31,8 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
     item,
     position,
     allowChildren = true,
+    addChildrenLabel = '+ Add sub-items',
+    groupChildrenLabel = 'Group Items (8 Slots)',
     onSave,
     onCancel,
 }) => {
@@ -297,13 +301,13 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
                         className="slice-editor-add-group"
                         onClick={() => setShowChildren(true)}
                     >
-                        + Add sub-items
+                        {addChildrenLabel}
                     </button>
                 )}
 
                 {allowChildren && showChildren && (
                     <div className="slice-editor-section slice-editor-group-children">
-                        <label className="slice-editor-label">Group Items (8 Slots)</label>
+                        <label className="slice-editor-label">{groupChildrenLabel}</label>
                         <div className="slice-editor-children-list">
                             {childrenList.map((child, idx) => (
                                 <div

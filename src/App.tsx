@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { PieMenu } from './components/PieMenu';
 import { StandalonePreferences } from './components/Preferences';
-import { UpdatePrompt } from './components/UpdatePrompt';
 import './index.css';
 
 function App() {
@@ -45,7 +44,6 @@ function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', pointerEvents: 'none' }}>
       <PieMenu />
-      <UpdatePrompt />
     </div>
   );
 }

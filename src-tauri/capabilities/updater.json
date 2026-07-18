@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "updater-main",
-  "description": "Auto-updater and relaunch only for the main window",
-  "windows": ["main"],
+  "description": "Auto-updater and relaunch for main and preferences windows",
+  "windows": ["main", "preferences"],
   "permissions": ["updater:default", "process:default"]
 }
