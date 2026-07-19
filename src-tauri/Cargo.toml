@@ -1,6 +1,6 @@
 [package]
 name = "hue"
-version = "1.2.13"
+version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
