@@ -485,6 +485,10 @@ export const PieMenu: React.FC = () => {
 
         if (launchMain !== null) {
             const currentItem = configRef.current[launchMain];
+            const launchIfAssigned = (path: string | undefined) => {
+                const p = path?.trim();
+                if (p) invoke('launch_app', { path: p }).catch(console.error);
+            };
 
             if (lastDistanceRef.current < DEAD_ZONE) {
                 // Canceled in center
@@ -494,20 +498,14 @@ export const PieMenu: React.FC = () => {
                 currentItem.children &&
                 currentItem.children.length > launchChild
             ) {
-                const childItem = currentItem.children[launchChild];
-                const grandItem = childItem.children?.[launchGrand];
-                if (grandItem?.path) {
-                    invoke('launch_app', { path: grandItem.path }).catch(console.error);
-                } else if (childItem.path) {
-                    invoke('launch_app', { path: childItem.path }).catch(console.error);
-                }
+                // Final pick is a grandchild slot — empty means launch nothing (no parent fallback)
+                const grandItem = currentItem.children[launchChild].children?.[launchGrand];
+                launchIfAssigned(grandItem?.path);
             } else if (launchChild !== null && currentItem.children && currentItem.children.length > launchChild) {
-                const childItem = currentItem.children[launchChild];
-                if (childItem.path) {
-                    invoke('launch_app', { path: childItem.path }).catch(console.error);
-                }
-            } else if (currentItem.path) {
-                invoke('launch_app', { path: currentItem.path }).catch(console.error);
+                // Final pick is a child slot — empty means launch nothing
+                launchIfAssigned(currentItem.children[launchChild]?.path);
+            } else {
+                launchIfAssigned(currentItem.path);
             }
         }
 
