@@ -29,9 +29,23 @@ export interface MenuConfig {
 // Re-export type alias for internal use
 type MenuItem = SliceItem;
 
+/** True if a slot has a label, path, or nested filled slots (ignores empty editor padding). */
+function isFilledSlot(item: MenuItem | undefined): boolean {
+    if (!item) return false;
+    if (item.name.trim() || item.path.trim()) return true;
+    return (item.children ?? []).some(isFilledSlot);
+}
+
 function isGroupItem(item: MenuItem | undefined): boolean {
     if (!item) return false;
-    return !item.path || (item.children?.length ?? 0) > 0;
+    const hasKids = (item.children ?? []).some(isFilledSlot);
+    // Folder (no path) or hybrid/folder with real nested items
+    return !item.path || hasKids;
+}
+
+function groupHasGrandRing(item: MenuItem | undefined): boolean {
+    if (!item?.children) return false;
+    return item.children.some(isGroupItem);
 }
 
 const polarToCartesian = (centerX: number, centerY: number, radius: number, angleInDegrees: number) => {
@@ -327,10 +341,11 @@ export const PieMenu: React.FC = () => {
         }
 
         const rect = e.currentTarget.getBoundingClientRect();
-        // Map client coords into the 1000×1000 logical SVG space
-        const scale = size / rect.width;
-        const dx = (e.clientX - rect.left) * scale - center;
-        const dy = (e.clientY - rect.top) * scale - center;
+        // Map into the 1000×1000 container space (same as HTML labels — not the rotated pie-svg)
+        const scaleX = size / rect.width;
+        const scaleY = size / rect.height;
+        const dx = (e.clientX - rect.left) * scaleX - center;
+        const dy = (e.clientY - rect.top) * scaleY - center;
         const distance = Math.sqrt(dx * dx + dy * dy);
         lastDistanceRef.current = distance;
 
@@ -363,10 +378,16 @@ export const PieMenu: React.FC = () => {
 
         const lockedMain = lockedMainRef.current;
 
-        // ── Level 1: parent locked; sticky child; inward returns to parent band ──
+        // ── Level 1: parent locked; child selectable by angle until grand ring ──
         if (lockLevelRef.current === 1 && lockedMain !== null) {
             const mainHasPath = !!items[lockedMain]?.path;
             const childPickMin = mainHasPath ? 140 : 70;
+            const hoverChild = (potentialChildIndex >= 0 && potentialChildIndex < maxChildrenVisible)
+                ? items[lockedMain]?.children?.[potentialChildIndex]
+                : undefined;
+            const childHasPath = !!hoverChild?.path;
+            // Enter grand ring slightly past child outer edge (300)
+            const grandPickMin = isGroupItem(hoverChild) ? (childHasPath ? 320 : 300) : Infinity;
 
             if (distance < DEAD_ZONE) {
                 lockLevelRef.current = 0;
@@ -375,10 +396,19 @@ export const PieMenu: React.FC = () => {
                 stickyGrandRef.current = null;
                 syncSelectionFromSticky();
             } else if (distance < childPickMin) {
+                // Parent band — clear child so a new sector can be chosen
                 stickyChildRef.current = null;
                 stickyGrandRef.current = null;
                 syncSelectionFromSticky();
+            } else if (distance < grandPickMin) {
+                // Child ring — free angle pick (not frozen yet)
+                stickyChildRef.current = potentialChildIndex >= 0 && potentialChildIndex < maxChildrenVisible
+                    ? potentialChildIndex
+                    : null;
+                stickyGrandRef.current = null;
+                syncSelectionFromSticky();
             } else {
+                // Commit to this child and enter grand level
                 if (stickyChildRef.current === null
                     && potentialChildIndex >= 0
                     && potentialChildIndex < maxChildrenVisible) {
@@ -386,25 +416,20 @@ export const PieMenu: React.FC = () => {
                 }
                 stickyGrandRef.current = null;
                 syncSelectionFromSticky();
-
                 const childItem = stickyChildRef.current !== null
                     ? items[lockedMain]?.children?.[stickyChildRef.current]
                     : undefined;
                 if (isGroupItem(childItem)) {
-                    const childHasPath = !!childItem?.path;
-                    const grandPickMin = childHasPath ? 340 : 300;
-                    if (distance >= grandPickMin) {
-                        lockLevelRef.current = 2;
-                    }
+                    lockLevelRef.current = 2;
                 }
             }
         }
 
-        // ── Level 2: child locked; sticky grandchild; inward returns to child ──
+        // ── Level 2: child frozen; sticky grandchild; inward returns to child ring ──
         if (lockLevelRef.current === 2 && lockedMain !== null && stickyChildRef.current !== null) {
             const childItem = items[lockedMain]?.children?.[stickyChildRef.current];
             const childHasPath = !!childItem?.path;
-            const grandPickMin = childHasPath ? 340 : 300;
+            const grandPickMin = childHasPath ? 320 : 300;
             const childPickMin = !!items[lockedMain]?.path ? 140 : 70;
 
             if (distance < DEAD_ZONE) {
@@ -419,8 +444,12 @@ export const PieMenu: React.FC = () => {
                 stickyGrandRef.current = null;
                 syncSelectionFromSticky();
             } else if (distance < grandPickMin) {
+                // Back into child ring — unfreeze child so angle can re-pick
                 lockLevelRef.current = 1;
                 stickyGrandRef.current = null;
+                stickyChildRef.current = potentialChildIndex >= 0 && potentialChildIndex < maxChildrenVisible
+                    ? potentialChildIndex
+                    : stickyChildRef.current;
                 syncSelectionFromSticky();
             } else {
                 if (stickyGrandRef.current === null
@@ -430,6 +459,13 @@ export const PieMenu: React.FC = () => {
                 }
                 syncSelectionFromSticky();
             }
+        }
+
+        // Expand OS hit-test early so the cursor can reach the grand ring
+        if (lockedMainRef.current !== null && groupHasGrandRing(items[lockedMainRef.current])) {
+            clickThroughStateRef.current.hitDiskRadius = grandOuterRadius;
+        } else if (lockLevelRef.current >= 1) {
+            clickThroughStateRef.current.hitDiskRadius = childOuterRadius;
         }
 
         if (gestureDebug) {
@@ -614,11 +650,16 @@ export const PieMenu: React.FC = () => {
         activeChildIndex !== null &&
         isGroupItem(activeChildItem);
 
-    const hitDiskRadius = isGrandGroupOpen
-        ? grandOuterRadius
-        : isGroupOpen
-            ? childOuterRadius
-            : outerRadius;
+    // If any sub can open a grand ring, keep the hit disk large from the moment the parent opens
+    // so the pointer is not clipped by OS click-through before React expands the ring.
+    const hitDiskRadius =
+        isGroupOpen && groupHasGrandRing(items[activeIndex!])
+            ? grandOuterRadius
+            : isGrandGroupOpen
+                ? grandOuterRadius
+                : isGroupOpen
+                    ? childOuterRadius
+                    : outerRadius;
 
     clickThroughStateRef.current = {
         editorOpen: editingIndex !== null,
@@ -648,35 +689,6 @@ export const PieMenu: React.FC = () => {
                     r={hitDiskRadius}
                     fill="rgba(0,0,0,0.01)"
                 />
-                {gestureDebug && (
-                    <g className="gesture-debug-rings" pointerEvents="none">
-                        <circle cx={center} cy={center} r={DEAD_ZONE} className="gesture-debug-ring dead" />
-                        <circle cx={center} cy={center} r={innerRadius} className="gesture-debug-ring main-in" />
-                        <circle cx={center} cy={center} r={outerRadius} className="gesture-debug-ring main-out" />
-                        <circle cx={center} cy={center} r={childOuterRadius} className="gesture-debug-ring child-out" />
-                        <circle cx={center} cy={center} r={grandOuterRadius} className="gesture-debug-ring grand-out" />
-                        <circle cx={center} cy={center} r={140} className="gesture-debug-ring child-pick" />
-                        <circle cx={center} cy={center} r={300} className="gesture-debug-ring grand-pick" />
-                        <circle cx={center} cy={center} r={340} className="gesture-debug-ring grand-pick-hybrid" />
-                    </g>
-                )}
-                {gestureDebug && gestureTrail.length > 1 && (
-                    <polyline
-                        className="gesture-debug-trail"
-                        fill="none"
-                        points={gestureTrail.map(p => `${p.x},${p.y}`).join(' ')}
-                        pointerEvents="none"
-                    />
-                )}
-                {gestureDebug && gestureTrail.length > 0 && (
-                    <circle
-                        className="gesture-debug-cursor"
-                        cx={gestureTrail[gestureTrail.length - 1].x}
-                        cy={gestureTrail[gestureTrail.length - 1].y}
-                        r={6}
-                        pointerEvents="none"
-                    />
-                )}
                 {items.map((_item, index) => {
                     const startAngle = index * sliceAngle - halfSlice;
                     // small gap between slices for aesthetics
@@ -774,6 +786,41 @@ export const PieMenu: React.FC = () => {
                     });
                 })()}
             </svg>
+
+            {/* Unrotated overlay: pie-svg uses rotate(-90deg), so trail/rings must live outside it */}
+            {gestureDebug && (
+                <svg
+                    className="gesture-debug-overlay"
+                    viewBox={`0 0 ${size} ${size}`}
+                    pointerEvents="none"
+                >
+                    <g className="gesture-debug-rings">
+                        <circle cx={center} cy={center} r={DEAD_ZONE} className="gesture-debug-ring dead" />
+                        <circle cx={center} cy={center} r={innerRadius} className="gesture-debug-ring main-in" />
+                        <circle cx={center} cy={center} r={outerRadius} className="gesture-debug-ring main-out" />
+                        <circle cx={center} cy={center} r={childOuterRadius} className="gesture-debug-ring child-out" />
+                        <circle cx={center} cy={center} r={grandOuterRadius} className="gesture-debug-ring grand-out" />
+                        <circle cx={center} cy={center} r={140} className="gesture-debug-ring child-pick" />
+                        <circle cx={center} cy={center} r={300} className="gesture-debug-ring grand-pick" />
+                        <circle cx={center} cy={center} r={320} className="gesture-debug-ring grand-pick-hybrid" />
+                    </g>
+                    {gestureTrail.length > 1 && (
+                        <polyline
+                            className="gesture-debug-trail"
+                            fill="none"
+                            points={gestureTrail.map(p => `${p.x},${p.y}`).join(' ')}
+                        />
+                    )}
+                    {gestureTrail.length > 0 && (
+                        <circle
+                            className="gesture-debug-cursor"
+                            cx={gestureTrail[gestureTrail.length - 1].x}
+                            cy={gestureTrail[gestureTrail.length - 1].y}
+                            r={6}
+                        />
+                    )}
+                </svg>
+            )}
 
             {/* Sub-menu labels */}
             {activeIndex !== null && (() => {
