@@ -1,0 +1,14 @@
+---
+description: After any product fix or feature change, always ship a release update
+alwaysApply: true
+---
+
+# Always release after fixes
+
+When you change Hue behavior, UI, config, or packaging in a way the installed app needs:
+
+1. **Do not stop at local code** — finish by shipping an update.
+2. Run **`npm run release`** from the repo root (bumps patch, builds, signs, pushes tag, publishes GitHub Release).
+3. Tell the user the new version and that they can use Preferences → Advanced → **Check for updates**.
+
+Applies after bug fixes, gesture/UX changes, prefs changes, and similar product work — not after docs-only or rule-only edits unless the user also asked for a release.
