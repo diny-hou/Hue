@@ -285,6 +285,28 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                             </label>
                         </div>
                         <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
+                            <label>Software Update</label>
+                            <div className="pref-update-actions">
+                                <button
+                                    type="button"
+                                    className="pref-update-btn"
+                                    onClick={() => void updater.runUpdate()}
+                                    disabled={updater.isBusy}
+                                >
+                                    {updater.phase === 'checking'
+                                        ? 'Checking…'
+                                        : updater.isBusy
+                                            ? 'Updating…'
+                                            : 'Check for updates'}
+                                </button>
+                                {updater.statusMessage && (
+                                    <p className={`pref-update-status${updater.phase === 'uptodate' ? ' success' : ''}`}>
+                                        {updater.statusMessage}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                        <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
                             <label style={{ color: '#ff6b6b' }}>Danger Zone</label>
                             <button
                                 onClick={handleEmptyAllSlices}
@@ -608,29 +630,6 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 value={retraceChild}
                                 onChange={(e) => setRetraceChild(Number(e.target.value))}
                             />
-                        </div>
-
-                        <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
-                            <label>Software Update</label>
-                            <div className="pref-update-actions">
-                                <button
-                                    type="button"
-                                    className="pref-update-btn"
-                                    onClick={() => void updater.runUpdate()}
-                                    disabled={updater.isBusy}
-                                >
-                                    {updater.phase === 'checking'
-                                        ? 'Checking…'
-                                        : updater.isBusy
-                                            ? 'Updating…'
-                                            : 'Check for updates'}
-                                </button>
-                                {updater.statusMessage && (
-                                    <p className={`pref-update-status${updater.phase === 'uptodate' ? ' success' : ''}`}>
-                                        {updater.statusMessage}
-                                    </p>
-                                )}
-                            </div>
                         </div>
                     </>
                 )}
