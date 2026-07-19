@@ -1192,8 +1192,13 @@ body {
 }
 
 .gesture-debug-ring.child-out,
-.gesture-debug-ring.child-pick {
+.gesture-debug-ring.child-pick,
+.gesture-debug-ring.child-commit {
   stroke: #ffd166;
+}
+
+.gesture-debug-ring.child-commit {
+  stroke-dasharray: 2 4;
 }
 
 .gesture-debug-ring.grand-out,

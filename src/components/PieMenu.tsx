@@ -378,10 +378,14 @@ export const PieMenu: React.FC = () => {
 
         const lockedMain = lockedMainRef.current;
 
-        // ── Level 1: parent locked; first child sticks (diagonal won't switch) ──
+        // ── Level 1: parent locked ──
+        // Inner child band = free angle pick (find the group that has grandchildren).
+        // Outer child band = freeze that child (diagonal won't switch), then open grand.
         if (lockLevelRef.current === 1 && lockedMain !== null) {
             const mainHasPath = !!items[lockedMain]?.path;
             const childPickMin = mainHasPath ? 140 : 70;
+            // Mid child ring (180–300): pick freely below this, freeze above it
+            const childCommit = 250;
 
             if (distance < DEAD_ZONE) {
                 lockLevelRef.current = 0;
@@ -390,12 +394,19 @@ export const PieMenu: React.FC = () => {
                 stickyGrandRef.current = null;
                 syncSelectionFromSticky();
             } else if (distance < childPickMin) {
-                // Parent band only — clear child so a new sector can be chosen
                 stickyChildRef.current = null;
                 stickyGrandRef.current = null;
                 syncSelectionFromSticky();
+            } else if (distance < childCommit) {
+                // Free pick — required so you can aim at a nested group before freezing
+                stickyChildRef.current =
+                    potentialChildIndex >= 0 && potentialChildIndex < maxChildrenVisible
+                        ? potentialChildIndex
+                        : null;
+                stickyGrandRef.current = null;
+                syncSelectionFromSticky();
             } else {
-                // Stick to the first child sector entered; ignore later angle changes
+                // Frozen — keep child; ignore diagonal angle changes
                 if (stickyChildRef.current === null
                     && potentialChildIndex >= 0
                     && potentialChildIndex < maxChildrenVisible) {
@@ -416,12 +427,13 @@ export const PieMenu: React.FC = () => {
             }
         }
 
-        // ── Level 2: child + first grandchild stick; inward with hysteresis to go back ──
+        // ── Level 2: child frozen + first grandchild sticks ──
         if (lockLevelRef.current === 2 && lockedMain !== null && stickyChildRef.current !== null) {
             const childItem = items[lockedMain]?.children?.[stickyChildRef.current];
             const grandEnter = childItem?.path ? 320 : 300;
-            const grandExit = grandEnter - 30; // hysteresis so diagonal wiggle doesn't drop the grand ring
+            const grandExit = grandEnter - 30;
             const childPickMin = !!items[lockedMain]?.path ? 140 : 70;
+            const childCommit = 250;
 
             if (distance < DEAD_ZONE) {
                 lockLevelRef.current = 0;
@@ -430,18 +442,22 @@ export const PieMenu: React.FC = () => {
                 stickyGrandRef.current = null;
                 syncSelectionFromSticky();
             } else if (distance < childPickMin) {
-                // Parent band — release child so user can pick another
                 lockLevelRef.current = 1;
                 stickyChildRef.current = null;
                 stickyGrandRef.current = null;
                 syncSelectionFromSticky();
             } else if (distance < grandExit) {
-                // Child ring — keep sticky child, drop grandchild only
+                // Leave grand ring; if still in commit zone keep frozen child, else free-pick zone
                 lockLevelRef.current = 1;
                 stickyGrandRef.current = null;
+                if (distance < childCommit) {
+                    stickyChildRef.current =
+                        potentialChildIndex >= 0 && potentialChildIndex < maxChildrenVisible
+                            ? potentialChildIndex
+                            : stickyChildRef.current;
+                }
                 syncSelectionFromSticky();
             } else {
-                // Stick to the first grandchild sector; ignore diagonal angle changes
                 if (stickyGrandRef.current === null
                     && potentialGrandIndex >= 0
                     && potentialGrandIndex < maxChildrenVisible) {
@@ -791,6 +807,7 @@ export const PieMenu: React.FC = () => {
                         <circle cx={center} cy={center} r={childOuterRadius} className="gesture-debug-ring child-out" />
                         <circle cx={center} cy={center} r={grandOuterRadius} className="gesture-debug-ring grand-out" />
                         <circle cx={center} cy={center} r={140} className="gesture-debug-ring child-pick" />
+                        <circle cx={center} cy={center} r={250} className="gesture-debug-ring child-commit" />
                         <circle cx={center} cy={center} r={300} className="gesture-debug-ring grand-pick" />
                         <circle cx={center} cy={center} r={320} className="gesture-debug-ring grand-pick-hybrid" />
                     </g>
@@ -969,7 +986,7 @@ export const PieMenu: React.FC = () => {
                 <div className="gesture-debug-hud" style={{ pointerEvents: 'none' }}>
                     <div>lock {debugHud.lock} · dist {debugHud.dist} · ang {debugHud.angle}°</div>
                     <div>main {debugHud.main ?? '—'} · child {debugHud.child ?? '—'} · grand {debugHud.grand ?? '—'}</div>
-                    <div className="gesture-debug-hud-hint">sticky child/grand · inward to re-pick</div>
+                    <div className="gesture-debug-hud-hint">pick child &lt;250 · freeze ≥250 · grand ≥300</div>
                 </div>
             )}
 
