@@ -224,6 +224,7 @@ export const PieMenu: React.FC = () => {
     const [activeChildIndex, setActiveChildIndex] = useState<number | null>(null);
     const [activeGrandchildIndex, setActiveGrandchildIndex] = useState<number | null>(null);
     const [isVisible, setIsVisible] = useState(false);
+    const [prefsOpen, setPrefsOpen] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const isDraggingRef = React.useRef(false);
     const dragPointerIdRef = React.useRef<number | null>(null);
@@ -384,11 +385,34 @@ export const PieMenu: React.FC = () => {
             });
             const l6 = await listen('preferences-opened', () => {
                 isPreferencesOpenRef.current = true;
+                setPrefsOpen(true);
+                // Keep pie visible beside Preferences so threshold rings can be tuned live
+                setIsVisible(true);
+                lastShowTimeRef.current = Date.now();
             });
             const l7 = await listen('preferences-closed', () => {
                 isPreferencesOpenRef.current = false;
+                setPrefsOpen(false);
+                // Discard unsaved appearance preview
+                invoke<MenuConfig>('get_config')
+                    .then(config => {
+                        setItems(config.items);
+                        setConfigFull(config);
+                    })
+                    .catch(console.error);
             });
-            return [l1, l2, l3, l4, l5, l6, l7];
+            const l8 = await listen<Partial<AppearanceConfig>>('appearance-preview', (event) => {
+                const patch = event.payload;
+                if (!patch || typeof patch !== 'object') return;
+                setConfigFull(prev => {
+                    if (!prev) return prev;
+                    return {
+                        ...prev,
+                        appearance: { ...prev.appearance, ...patch },
+                    };
+                });
+            });
+            return [l1, l2, l3, l4, l5, l6, l7, l8];
         })();
 
         return () => {
@@ -482,6 +506,8 @@ export const PieMenu: React.FC = () => {
 
     const gestureDebug = !!configFull?.appearance?.gesture_path_debug;
     const gestureCapture = !!configFull?.appearance?.gesture_path_capture;
+    /** Rings while debug/capture OR Preferences open (live threshold tuning). */
+    const showThresholdRings = gestureDebug || gestureCapture || prefsOpen;
     const showGestureOverlay = gestureDebug || gestureCapture;
     const th = resolveGestureThresholds(configFull?.appearance);
     const DEAD_ZONE = 40;
@@ -1275,7 +1301,7 @@ export const PieMenu: React.FC = () => {
             </svg>
 
             {/* Unrotated overlay: pie-svg uses rotate(-90deg), so trail/rings must live outside it */}
-            {showGestureOverlay && (
+            {showThresholdRings && (
                 <svg
                     className="gesture-debug-overlay"
                     viewBox={`0 0 ${size} ${size}`}
@@ -1293,7 +1319,25 @@ export const PieMenu: React.FC = () => {
                         <circle cx={center} cy={center} r={th.grandEnter} className="gesture-debug-ring grand-pick" />
                         <circle cx={center} cy={center} r={th.grandEnterHybrid} className="gesture-debug-ring grand-pick-hybrid" />
                     </g>
-                    {gestureCapture && captureTrail.length > 1
+                    <g className="gesture-debug-ring-labels">
+                        {[
+                            { r: th.retraceChild, label: `retrace child ${th.retraceChild}`, cls: 'retrace' },
+                            { r: th.retraceGrand, label: `retrace grand ${th.retraceGrand}`, cls: 'retrace' },
+                            { r: th.childSwitchMax, label: `half split ${th.childSwitchMax}`, cls: 'commit' },
+                            { r: th.grandEnter, label: `grand ${th.grandEnter}`, cls: 'grand' },
+                            { r: th.grandEnterHybrid, label: `hybrid ${th.grandEnterHybrid}`, cls: 'grand' },
+                        ].map(({ r, label, cls }) => (
+                            <text
+                                key={label}
+                                className={`gesture-debug-ring-label ${cls}`}
+                                x={center + 8}
+                                y={center - r + 4}
+                            >
+                                {label}
+                            </text>
+                        ))}
+                    </g>
+                    {showGestureOverlay && (gestureCapture && captureTrail.length > 1
                         ? captureTrail.slice(1).map((sample, i) => {
                             const prev = captureTrail[i];
                             const zoneColor =
@@ -1321,8 +1365,8 @@ export const PieMenu: React.FC = () => {
                                 fill="none"
                                 points={gestureTrail.map(p => `${p.x},${p.y}`).join(' ')}
                             />
-                        )}
-                    {(gestureCapture ? captureTrail : gestureTrail).length > 0 && (() => {
+                        ))}
+                    {showGestureOverlay && (gestureCapture ? captureTrail : gestureTrail).length > 0 && (() => {
                         const pts = gestureCapture ? captureTrail : gestureTrail;
                         const last = pts[pts.length - 1];
                         return (

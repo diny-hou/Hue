@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getName, getTauriVersion, getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
+import { emit } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isEnabled, enable, disable } from '@tauri-apps/plugin-autostart';
-import { MenuConfig } from './PieMenu';
+import { AppearanceConfig, MenuConfig } from './PieMenu';
 import { UpdateDialog } from './UpdateDialog';
 import { useAppUpdater } from '../hooks/useAppUpdater';
 
@@ -85,6 +86,50 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     const [appVersion, setAppVersion] = useState('…');
     const [tauriVersion, setTauriVersion] = useState('…');
     const updater = useAppUpdater();
+    const previewReadyRef = useRef(false);
+
+    const buildAppearance = (): AppearanceConfig => ({
+        panel_opacity: opacity,
+        hover_opacity: hoverOpacity,
+        sub_panel_opacity: subPanelOpacity,
+        sub_panel_hover_opacity: subPanelHoverOpacity,
+        drag_opacity: dragOpacity,
+        panel_color: panelColor,
+        text_size: textSize,
+        text_color: textColor,
+        sub_panel_text_size: subPanelTextSize,
+        sub_panel_text_color: subPanelTextColor,
+        animation_type: animType,
+        hover_scale: hoverScale,
+        hover_animation: hoverAnim,
+        gesture_path_debug: gesturePathDebug,
+        gesture_path_capture: gesturePathCapture,
+        gesture_child_switch_max: childSwitchMax,
+        gesture_grand_enter: grandEnter,
+        gesture_grand_enter_hybrid: grandEnterHybrid,
+        gesture_retrace_grand: retraceGrand,
+        gesture_retrace_child: retraceChild,
+    });
+
+    // Live-preview appearance (esp. threshold rings) on the main pie while Preferences is open
+    useEffect(() => {
+        if (!previewReadyRef.current) {
+            previewReadyRef.current = true;
+            return;
+        }
+        const timer = window.setTimeout(() => {
+            void emit('appearance-preview', buildAppearance());
+        }, 40);
+        return () => window.clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional live preview deps
+    }, [
+        opacity, hoverOpacity, subPanelOpacity, subPanelHoverOpacity, dragOpacity,
+        panelColor, textSize, textColor, subPanelTextSize, subPanelTextColor,
+        animType, hoverScale, hoverAnim,
+        gesturePathDebug, gesturePathCapture,
+        childSwitchMax, grandEnter, grandEnterHybrid, retraceGrand, retraceChild,
+        activeTab,
+    ]);
 
     useEffect(() => {
         isEnabled()
@@ -164,28 +209,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
             const newConfig: MenuConfig = {
                 ...currentConfig,
                 global_shortcut: shortcut,
-                appearance: {
-                    panel_opacity: opacity,
-                    hover_opacity: hoverOpacity,
-                    sub_panel_opacity: subPanelOpacity,
-                    sub_panel_hover_opacity: subPanelHoverOpacity,
-                    drag_opacity: dragOpacity,
-                    panel_color: panelColor,
-                    text_size: textSize,
-                    text_color: textColor,
-                    sub_panel_text_size: subPanelTextSize,
-                    sub_panel_text_color: subPanelTextColor,
-                    animation_type: animType,
-                    hover_scale: hoverScale,
-                    hover_animation: hoverAnim,
-                    gesture_path_debug: gesturePathDebug,
-                    gesture_path_capture: gesturePathCapture,
-                    gesture_child_switch_max: childSwitchMax,
-                    gesture_grand_enter: grandEnter,
-                    gesture_grand_enter_hybrid: grandEnterHybrid,
-                    gesture_retrace_grand: retraceGrand,
-                    gesture_retrace_child: retraceChild,
-                }
+                appearance: buildAppearance(),
             };
             await invoke('update_config', { newConfig });
 
@@ -571,9 +595,9 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         </div>
                         <div className="pref-row" style={{ marginTop: '4px' }}>
                             <small style={{ color: '#aaa' }}>
-                                Child ring is split radially (default mid 240): inner half = switch child;
-                                outer half = path corridor — child freezes and grand is selected by angle (even while brushing other child panels).
-                                Retrace on the entry sector back into the inner half leaves grand mode.
+                                Live preview on the pie (rings + labels update as you drag).
+                                Apply to save. Close without Apply discards preview.
+                                Child half split: inner = switch child · outer = path→grand.
                             </small>
                         </div>
                         <div className="pref-row">
@@ -582,7 +606,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 type="range"
                                 min={180}
                                 max={300}
-                                step={5}
+                                step={1}
                                 value={childSwitchMax}
                                 onChange={(e) => setChildSwitchMax(Number(e.target.value))}
                             />
@@ -593,7 +617,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 type="range"
                                 min={260}
                                 max={380}
-                                step={5}
+                                step={1}
                                 value={grandEnter}
                                 onChange={(e) => setGrandEnter(Number(e.target.value))}
                             />
@@ -604,7 +628,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 type="range"
                                 min={280}
                                 max={400}
-                                step={5}
+                                step={1}
                                 value={grandEnterHybrid}
                                 onChange={(e) => setGrandEnterHybrid(Number(e.target.value))}
                             />
@@ -615,7 +639,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 type="range"
                                 min={100}
                                 max={280}
-                                step={5}
+                                step={1}
                                 value={retraceGrand}
                                 onChange={(e) => setRetraceGrand(Number(e.target.value))}
                             />
@@ -626,7 +650,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 type="range"
                                 min={70}
                                 max={220}
-                                step={5}
+                                step={1}
                                 value={retraceChild}
                                 onChange={(e) => setRetraceChild(Number(e.target.value))}
                             />

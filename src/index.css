@@ -1317,6 +1317,27 @@ body {
   opacity: 0.9;
 }
 
+.gesture-debug-ring-label {
+  fill: rgba(255, 255, 255, 0.75);
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 3px;
+}
+
+.gesture-debug-ring-label.commit {
+  fill: #ffd166;
+}
+
+.gesture-debug-ring-label.grand {
+  fill: #c77dff;
+}
+
+.gesture-debug-ring-label.retrace {
+  fill: #f472b6;
+}
+
 .gesture-debug-hud {
   position: absolute;
   left: 16px;
