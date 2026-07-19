@@ -382,28 +382,16 @@ export const PieMenu: React.FC = () => {
         }
 
         const lockedMain = lockedMainRef.current;
-        // Entry corridor = same 8-way sector as the locked child.
-        // Other directions (e.g. 12 o'clock → straight down) never retreat the stack.
-        const onChildPath =
-            stickyChildRef.current !== null && potentialChildIndex === stickyChildRef.current;
 
-        // ── Level 1: parent locked ──
-        // Free-pick until commit, then lock. Parent retreat = entry sector + inside parent band only.
+        // ── Level 1: pick a child, then keep it for the rest of the drag ──
         if (lockLevelRef.current === 1 && lockedMain !== null) {
             const mainHasPath = !!items[lockedMain]?.path;
             const childPickMin = mainHasPath ? 140 : 70;
             const childCommit = 250;
 
-            if (distance < DEAD_ZONE) {
-                // Center cancel — any angle
-                lockLevelRef.current = 0;
-                lockedMainRef.current = null;
-                stickyChildRef.current = null;
-                stickyGrandRef.current = null;
-                childLockedRef.current = false;
-                syncSelectionFromSticky();
-            } else if (!childLockedRef.current) {
-                if (distance < childPickMin) {
+            if (!childLockedRef.current) {
+                // Still choosing — center / parent band can reset the preview
+                if (distance < DEAD_ZONE || distance < childPickMin) {
                     stickyChildRef.current = null;
                     stickyGrandRef.current = null;
                     syncSelectionFromSticky();
@@ -420,17 +408,14 @@ export const PieMenu: React.FC = () => {
                         && potentialChildIndex < maxChildrenVisible) {
                         stickyChildRef.current = potentialChildIndex;
                     }
-                    childLockedRef.current = stickyChildRef.current !== null;
+                    if (stickyChildRef.current !== null) {
+                        childLockedRef.current = true;
+                    }
                     stickyGrandRef.current = null;
                     syncSelectionFromSticky();
                 }
             } else {
-                // Locked: diagonal / opposite side never closes. Only entry-sector retract.
-                stickyGrandRef.current = null;
-                if (onChildPath && distance < childPickMin) {
-                    stickyChildRef.current = null;
-                    childLockedRef.current = false;
-                }
+                // Child opened: center / other panels do not close or switch it
                 syncSelectionFromSticky();
             }
 
@@ -445,48 +430,22 @@ export const PieMenu: React.FC = () => {
             }
         }
 
-        // ── Level 2: grand sticks ──
-        // Touching the child ring must NOT drop grand. Retreat only when crossing
-        // inside the child ring (past childInnerRadius) on the entry sector.
+        // ── Level 2: grand opened — stay open until pointer up ──
         if (lockLevelRef.current === 2 && lockedMain !== null && stickyChildRef.current !== null) {
             const childItem = items[lockedMain]?.children?.[stickyChildRef.current];
             const grandEnter = childItem?.path ? 320 : 300;
-            const childPickMin = !!items[lockedMain]?.path ? 140 : 70;
-            // Must pull back through the child ring, not merely hover it
-            const grandRetreatInside = childInnerRadius; // 180
 
-            if (distance < DEAD_ZONE) {
-                lockLevelRef.current = 0;
-                lockedMainRef.current = null;
-                stickyChildRef.current = null;
-                stickyGrandRef.current = null;
-                childLockedRef.current = false;
-                syncSelectionFromSticky();
-            } else if (onChildPath && distance < childPickMin) {
-                // Entry path → parent band: release child + grand
-                lockLevelRef.current = 1;
-                stickyChildRef.current = null;
-                stickyGrandRef.current = null;
-                childLockedRef.current = false;
-                syncSelectionFromSticky();
-            } else if (onChildPath && distance < grandRetreatInside) {
-                // Entry path past inner edge of child ring: drop grand only
-                lockLevelRef.current = 1;
-                stickyGrandRef.current = null;
-                childLockedRef.current = true;
-                syncSelectionFromSticky();
-            } else {
-                // Child-ring hover / other directions: stay on grand
-                if (
-                    distance >= grandEnter
-                    && stickyGrandRef.current === null
-                    && potentialGrandIndex >= 0
-                    && potentialGrandIndex < maxChildrenVisible
-                ) {
-                    stickyGrandRef.current = potentialGrandIndex;
-                }
-                syncSelectionFromSticky();
+            // First time in the grand ring: stick one grandchild. Never switch / never retreat.
+            if (
+                stickyGrandRef.current === null
+                && distance >= grandEnter
+                && potentialGrandIndex >= 0
+                && potentialGrandIndex < maxChildrenVisible
+            ) {
+                stickyGrandRef.current = potentialGrandIndex;
             }
+            childLockedRef.current = true;
+            syncSelectionFromSticky();
         }
 
         // Expand OS hit-test early so the cursor can reach the grand ring
@@ -1009,7 +968,7 @@ export const PieMenu: React.FC = () => {
                 <div className="gesture-debug-hud" style={{ pointerEvents: 'none' }}>
                     <div>lock {debugHud.lock} · dist {debugHud.dist} · ang {debugHud.angle}°</div>
                     <div>main {debugHud.main ?? '—'} · child {debugHud.child ?? '—'} · grand {debugHud.grand ?? '—'}</div>
-                    <div className="gesture-debug-hud-hint">retreat: entry sector + inside r&lt;180 · else wander OK</div>
+                    <div className="gesture-debug-hud-hint">once open: stays until release</div>
                 </div>
             )}
 
