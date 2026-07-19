@@ -76,7 +76,8 @@ fn default_text_color() -> String {
 }
 
 fn default_gesture_child_switch_max() -> f32 {
-    250.0
+    // Midpoint of child ring (180–300): inner half = switch, outer half = path→grand
+    240.0
 }
 
 fn default_gesture_grand_enter() -> f32 {
