@@ -157,6 +157,7 @@ export const PieMenu: React.FC = () => {
     const [isVisible, setIsVisible] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const isDraggingRef = React.useRef(false);
+    const dragPointerIdRef = React.useRef<number | null>(null);
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [editingChildIndex, setEditingChildIndex] = useState<number | null>(null);
     const [editingGrandchildIndex, setEditingGrandchildIndex] = useState<number | null>(null);
@@ -518,6 +519,7 @@ export const PieMenu: React.FC = () => {
         }
         isDraggingRef.current = true;
         setIsDragging(true);
+        dragPointerIdRef.current = e.pointerId;
         lockLevelRef.current = 0;
         lockedMainRef.current = null;
         stickyChildRef.current = null;
@@ -779,8 +781,89 @@ export const PieMenu: React.FC = () => {
         };
     }, [isDragging]);
 
-    // Use onContextMenu to prevent the right-click menu, allowing drag with both left/right click.
-    const handleContextMenu = (_e: React.MouseEvent) => _e.preventDefault();
+    /** Stop marking drag without launch/dismiss so a slice editor can open. */
+    const abortDragForEditor = (target: EventTarget | null) => {
+        if (!isDraggingRef.current) return;
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        const pid = dragPointerIdRef.current;
+        dragPointerIdRef.current = null;
+        if (target && pid !== null) {
+            try {
+                (target as HTMLElement).releasePointerCapture(pid);
+            } catch {
+                /* ignore */
+            }
+        }
+        finalizeCapture();
+    };
+
+    // Right-click opens slice editor. Pointer capture steals path-level contextmenu during drag,
+    // so resolve the hit from cursor position on the container.
+    const handleContextMenu = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isEditorOpenRef.current) return;
+
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const scaleX = size / rect.width;
+        const scaleY = size / rect.height;
+        const dx = (e.clientX - rect.left) * scaleX - center;
+        const dy = (e.clientY - rect.top) * scaleY - center;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        let angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+        angleDeg = (angleDeg + 90 + 360) % 360;
+
+        const potentialMainIndex = Math.floor(((angleDeg + halfSlice) % 360) / sliceAngle);
+        const potentialChildIndex = Math.floor(((angleDeg + childHalfSlice) % 360) / childSliceAngle);
+
+        const parentIdx = lockedMainRef.current
+            ?? (activeIndex !== null && isGroupItem(items[activeIndex]) ? activeIndex : null);
+        const parentItem = parentIdx !== null ? items[parentIdx] : undefined;
+        const stickyChild = stickyChildRef.current ?? activeChildIndex;
+        const childItem = parentIdx !== null && stickyChild !== null
+            ? items[parentIdx]?.children?.[stickyChild]
+            : undefined;
+
+        abortDragForEditor(e.currentTarget);
+
+        // Grand ring
+        if (
+            parentIdx !== null
+            && stickyChild !== null
+            && isGroupItem(childItem)
+            && distance >= childOuterRadius
+            && distance <= grandOuterRadius + 20
+            && potentialChildIndex >= 0
+            && potentialChildIndex < maxChildrenVisible
+        ) {
+            handleOpenEditor(parentIdx, stickyChild, potentialChildIndex);
+            return;
+        }
+
+        // Child ring (including while grand ring is open — edit the child under the cursor)
+        if (
+            parentIdx !== null
+            && isGroupItem(parentItem)
+            && distance >= childInnerRadius
+            && distance < childOuterRadius
+            && potentialChildIndex >= 0
+            && potentialChildIndex < maxChildrenVisible
+        ) {
+            handleOpenEditor(parentIdx, potentialChildIndex);
+            return;
+        }
+
+        // Main ring
+        if (
+            distance >= DEAD_ZONE
+            && distance < childInnerRadius
+            && potentialMainIndex >= 0
+            && potentialMainIndex < items.length
+        ) {
+            handleOpenEditor(potentialMainIndex);
+        }
+    };
 
     const handleOpenEditor = (index: number, childIdx: number | null = null, grandchildIdx: number | null = null) => {
         setEditingIndex(index);
