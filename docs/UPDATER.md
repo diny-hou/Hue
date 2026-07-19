@@ -71,7 +71,22 @@ Repository → Settings → Secrets and variables → Actions:
 - `TAURI_SIGNING_PRIVATE_KEY`
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (optional)
 
-## 3. Ship a product release
+## 3. Ship a product release (recommended)
+
+One command from the repo root (bump patch → incremental build → sign → GitHub Release):
+
+```bat
+npm run release
+npm run release -- 1.2.5
+```
+
+Requires `src-tauri/.keys/hue.key` (password `hue`) and `gh` auth.
+
+This is **much faster on the 2nd+ run** because Cargo stays incremental — do **not** `cargo clean` unless you must.
+
+Tauri’s updater still downloads the full installer (not a binary diff). The win is release automation + incremental compile, not delta patches.
+
+### Manual / CI alternative
 
 ```bash
 # on main, versions aligned
@@ -79,13 +94,7 @@ git tag v0.1.1
 git push origin v0.1.1
 ```
 
-CI uploads:
-
-- `Hue_*_x64-setup.exe`
-- `Hue_*_x64-setup.exe.sig`
-- `update.json` (referenced by `/releases/latest/download/update.json`)
-
-Users on an older build see **Update available** on next launch.
+CI uploads `Hue_*_x64-setup.exe`, `.sig`, and `update.json` when signing secrets match the app pubkey.
 
 ## 4. Daybuild (preview only)
 
