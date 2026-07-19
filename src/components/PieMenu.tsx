@@ -45,12 +45,23 @@ type CaptureSample = {
     event?: string;
 };
 
+/** Child ring geometry — path split uses the radial midpoint by default. */
+const CHILD_INNER_R = 180;
+const CHILD_OUTER_R = 300;
+const CHILD_MID_R = (CHILD_INNER_R + CHILD_OUTER_R) / 2; // 240
+
 function resolveGestureThresholds(appearance?: AppearanceConfig | null) {
     return {
-        childSwitchMax: appearance?.gesture_child_switch_max ?? 250,
+        /** Inner half of child ring: child may switch. Outer half+: path / grand. */
+        childSwitchMax: (() => {
+            const v = appearance?.gesture_child_switch_max;
+            // Previous default was 250; treat as child-mid so path corridor starts at half
+            if (v === undefined || v === 250) return CHILD_MID_R;
+            return v;
+        })(),
         grandEnter: appearance?.gesture_grand_enter ?? 300,
         grandEnterHybrid: appearance?.gesture_grand_enter_hybrid ?? 320,
-        retraceGrand: appearance?.gesture_retrace_grand ?? 180,
+        retraceGrand: appearance?.gesture_retrace_grand ?? CHILD_MID_R,
         retraceChild: appearance?.gesture_retrace_child ?? 140,
     };
 }
@@ -73,11 +84,12 @@ function classifyZone(
     if (
         onEntryPath
         && lockLevel >= 2
-        && distance < th.retraceGrand
+        && distance < th.childSwitchMax
     ) {
         return 'retrace';
     }
-    if (distance >= th.grandEnter) return 'grand';
+    // Outer child half + beyond with grand lock = path aiming at grand
+    if (lockLevel >= 2 && distance >= th.childSwitchMax) return 'grand';
     if (distance >= th.childSwitchMax) return 'freeze';
     if (distance >= childPickMin) return 'switch';
     return 'parent';
@@ -360,8 +372,8 @@ export const PieMenu: React.FC = () => {
     const halfSlice = sliceAngle / 2; // Offset so panels CENTER on cardinal directions
 
     // Child ring dimensions
-    const childInnerRadius = 180; // connect seamlessly with outerRadius
-    const childOuterRadius = 300;
+    const childInnerRadius = CHILD_INNER_R; // connect seamlessly with outerRadius
+    const childOuterRadius = CHILD_OUTER_R;
 
     // Grandchild ring dimensions
     const grandInnerRadius = 300;
@@ -619,7 +631,7 @@ export const PieMenu: React.FC = () => {
                 childLockedRef.current = false;
                 syncSelectionFromSticky();
             } else if (distance >= th.childSwitchMax) {
-                // FREEZE ZONE — child sticks; skimming other child angles does not switch
+                // PATH ZONE (outer half of child+) — freeze child; group → grand by angle
                 if (
                     stickyChildRef.current === null
                     && potentialChildIndex >= 0
@@ -630,14 +642,13 @@ export const PieMenu: React.FC = () => {
                 }
                 if (stickyChildRef.current !== null) {
                     childLockedRef.current = true;
-                    stickyGrandRef.current = null;
                     const childItem = items[lockedMain]?.children?.[stickyChildRef.current];
                     if (isGroupItem(childItem)) {
-                        const grandEnter = childItem?.path ? th.grandEnterHybrid : th.grandEnter;
-                        if (distance >= grandEnter) {
-                            lockLevelRef.current = 2;
-                            captureEvent = captureEvent ?? 'grand_enter';
-                        }
+                        // Outer half is corridor to grand — do not wait for grand ring (300)
+                        lockLevelRef.current = 2;
+                        captureEvent = captureEvent ?? 'path_grand';
+                    } else {
+                        stickyGrandRef.current = null;
                     }
                 }
                 syncSelectionFromSticky();
@@ -647,16 +658,12 @@ export const PieMenu: React.FC = () => {
             }
         }
 
-        // ── Level 2: grand by angle; child frozen; retreat only on entry corridor ──
+        // ── Level 2: grand by angle from outer child half; child frozen; retrace = inner half on entry ──
         if (lockLevelRef.current === 2 && lockedMain !== null) {
             childLockedRef.current = true;
             const stickyChild = stickyChildRef.current;
             const onChildPath =
                 stickyChild !== null && potentialChildIndex === stickyChild;
-            const childItem = stickyChild !== null
-                ? items[lockedMain]?.children?.[stickyChild]
-                : undefined;
-            const grandEnter = childItem?.path ? th.grandEnterHybrid : th.grandEnter;
 
             if (distance < DEAD_ZONE) {
                 stickyChildRef.current = null;
@@ -666,7 +673,8 @@ export const PieMenu: React.FC = () => {
                 lockedMainRef.current = null;
                 updateActiveIndex(null);
                 captureEvent = captureEvent ?? 'dead_unlock';
-            } else if (onChildPath && distance < th.retraceGrand) {
+            } else if (onChildPath && distance < th.childSwitchMax) {
+                // Back into inner half of child on entry corridor → leave grand, allow child switch
                 stickyGrandRef.current = null;
                 lockLevelRef.current = 1;
                 captureEvent = captureEvent ?? 'retrace_grand';
@@ -677,16 +685,17 @@ export const PieMenu: React.FC = () => {
                 }
             } else if (
                 stickyChild !== null
-                && distance >= grandEnter
+                && distance >= th.childSwitchMax
                 && potentialGrandIndex >= 0
                 && potentialGrandIndex < maxChildrenVisible
             ) {
+                // Path / grand zone: pick grand by angle (even while skimming other child panels)
                 if (stickyGrandRef.current !== potentialGrandIndex) {
                     captureEvent = captureEvent ?? 'grand_switch';
                 }
                 stickyGrandRef.current = potentialGrandIndex;
             }
-            // Off-path / mid freeze: keep child+grand — brush other children without switching
+            // Off-path in path zone: keep child+grand — brush other children without switching
             syncSelectionFromSticky();
         }
 
@@ -1227,8 +1236,8 @@ export const PieMenu: React.FC = () => {
                     <div>lock {debugHud.lock} · dist {debugHud.dist} · ang {debugHud.angle}° · zone {debugHud.zone}</div>
                     <div>main {debugHud.main ?? '—'} · child {debugHud.child ?? '—'} · grand {debugHud.grand ?? '—'}</div>
                     <div className="gesture-debug-hud-hint">
-                        child {debugHud.childSwitchable ? 'SWITCHABLE' : 'FROZEN'}
-                        {' · '}switch&lt;{th.childSwitchMax} · freeze≥{th.childSwitchMax} · grand≥{th.grandEnter}
+                        child {debugHud.childSwitchable ? 'SWITCH (inner half)' : 'PATH→grand (outer half)'}
+                        {' · '}split@{th.childSwitchMax}
                         {gestureCapture ? ' · capture→console/localStorage' : ''}
                     </div>
                 </div>

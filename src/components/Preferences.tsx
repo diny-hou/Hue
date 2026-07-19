@@ -67,7 +67,12 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     const [hoverAnim, setHoverAnim] = useState(config.appearance?.hover_animation || 'none');
     const [gesturePathDebug, setGesturePathDebug] = useState(!!config.appearance?.gesture_path_debug);
     const [gesturePathCapture, setGesturePathCapture] = useState(!!config.appearance?.gesture_path_capture);
-    const [childSwitchMax, setChildSwitchMax] = useState(config.appearance?.gesture_child_switch_max ?? 250);
+    const [childSwitchMax, setChildSwitchMax] = useState(
+        // 240 = midpoint of child ring (180–300); migrate previous default 250 → mid
+        (config.appearance?.gesture_child_switch_max === 250
+            ? 240
+            : config.appearance?.gesture_child_switch_max) ?? 240,
+    );
     const [grandEnter, setGrandEnter] = useState(config.appearance?.gesture_grand_enter ?? 300);
     const [grandEnterHybrid, setGrandEnterHybrid] = useState(config.appearance?.gesture_grand_enter_hybrid ?? 320);
     const [retraceGrand, setRetraceGrand] = useState(config.appearance?.gesture_retrace_grand ?? 180);
@@ -544,15 +549,16 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         </div>
                         <div className="pref-row" style={{ marginTop: '4px' }}>
                             <small style={{ color: '#aaa' }}>
-                                Below Child Switch Max: child may change. At/above: child freezes so you can skim other children toward a grand.
-                                Retrace radii only apply on the entry sector (corridor back).
+                                Child ring is split radially (default mid 240): inner half = switch child;
+                                outer half = path corridor — child freezes and grand is selected by angle (even while brushing other child panels).
+                                Retrace on the entry sector back into the inner half leaves grand mode.
                             </small>
                         </div>
                         <div className="pref-row">
-                            <label>Child Switch Max ({childSwitchMax})</label>
+                            <label>Child Half Split ({childSwitchMax})</label>
                             <input
                                 type="range"
-                                min={160}
+                                min={180}
                                 max={300}
                                 step={5}
                                 value={childSwitchMax}
