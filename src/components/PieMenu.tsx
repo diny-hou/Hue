@@ -457,39 +457,24 @@ export const PieMenu: React.FC = () => {
 
         const lockedMain = lockedMainRef.current;
 
-        // ── Level 1: pick a child, then keep it for the rest of the drag ──
+        // ── Level 1: child ring stays open once entered; angle still switches siblings ──
         if (lockLevelRef.current === 1 && lockedMain !== null) {
             const mainHasPath = !!items[lockedMain]?.path;
             const childPickMin = mainHasPath ? 140 : 70;
-            const childCommit = 250;
 
-            if (!childLockedRef.current) {
-                // Still choosing — center / parent band can reset the preview
-                if (distance < DEAD_ZONE || distance < childPickMin) {
-                    stickyChildRef.current = null;
-                    stickyGrandRef.current = null;
-                    syncSelectionFromSticky();
-                } else if (distance < childCommit) {
-                    stickyChildRef.current =
-                        potentialChildIndex >= 0 && potentialChildIndex < maxChildrenVisible
-                            ? potentialChildIndex
-                            : null;
-                    stickyGrandRef.current = null;
-                    syncSelectionFromSticky();
-                } else {
-                    if (stickyChildRef.current === null
-                        && potentialChildIndex >= 0
-                        && potentialChildIndex < maxChildrenVisible) {
-                        stickyChildRef.current = potentialChildIndex;
-                    }
-                    if (stickyChildRef.current !== null) {
-                        childLockedRef.current = true;
-                    }
-                    stickyGrandRef.current = null;
-                    syncSelectionFromSticky();
-                }
-            } else {
-                // Child opened: center / other panels do not close or switch it
+            if (distance >= childPickMin
+                && potentialChildIndex >= 0
+                && potentialChildIndex < maxChildrenVisible) {
+                stickyChildRef.current = potentialChildIndex;
+                stickyGrandRef.current = null;
+                childLockedRef.current = true; // ring stays open even if you wander to center later
+                syncSelectionFromSticky();
+            } else if (childLockedRef.current) {
+                // Center / parent band: keep last child highlighted, do not close
+                syncSelectionFromSticky();
+            } else if (distance < DEAD_ZONE) {
+                stickyChildRef.current = null;
+                stickyGrandRef.current = null;
                 syncSelectionFromSticky();
             }
 
@@ -504,21 +489,37 @@ export const PieMenu: React.FC = () => {
             }
         }
 
-        // ── Level 2: grand opened — stay open until pointer up ──
-        if (lockLevelRef.current === 2 && lockedMain !== null && stickyChildRef.current !== null) {
-            const childItem = items[lockedMain]?.children?.[stickyChildRef.current];
-            const grandEnter = childItem?.path ? 320 : 300;
+        // ── Level 2: grand ring stays open; angle switches grandchildren (and children in mid ring) ──
+        if (lockLevelRef.current === 2 && lockedMain !== null) {
+            const mainHasPath = !!items[lockedMain]?.path;
+            const childPickMin = mainHasPath ? 140 : 70;
+            childLockedRef.current = true;
 
-            // First time in the grand ring: stick one grandchild. Never switch / never retreat.
             if (
-                stickyGrandRef.current === null
-                && distance >= grandEnter
+                stickyChildRef.current !== null
+                && distance >= (items[lockedMain]?.children?.[stickyChildRef.current]?.path ? 320 : 300)
                 && potentialGrandIndex >= 0
                 && potentialGrandIndex < maxChildrenVisible
             ) {
+                // In grand ring — pick any grandchild by angle
                 stickyGrandRef.current = potentialGrandIndex;
+            } else if (
+                distance >= childPickMin
+                && potentialChildIndex >= 0
+                && potentialChildIndex < maxChildrenVisible
+            ) {
+                // Back in child ring — switch child freely; clear grand until pushed out again
+                if (stickyChildRef.current !== potentialChildIndex) {
+                    stickyChildRef.current = potentialChildIndex;
+                    stickyGrandRef.current = null;
+                }
+                const childItem = items[lockedMain]?.children?.[stickyChildRef.current];
+                if (!isGroupItem(childItem)) {
+                    lockLevelRef.current = 1;
+                    stickyGrandRef.current = null;
+                }
             }
-            childLockedRef.current = true;
+            // Center / elsewhere: keep last child+grand selection, rings stay open
             syncSelectionFromSticky();
         }
 
@@ -995,7 +996,7 @@ export const PieMenu: React.FC = () => {
                 <div className="gesture-debug-hud" style={{ pointerEvents: 'none' }}>
                     <div>lock {debugHud.lock} · dist {debugHud.dist} · ang {debugHud.angle}°</div>
                     <div>main {debugHud.main ?? '—'} · child {debugHud.child ?? '—'} · grand {debugHud.grand ?? '—'}</div>
-                    <div className="gesture-debug-hud-hint">once open: stays until release</div>
+                    <div className="gesture-debug-hud-hint">rings stay open · angle switches siblings</div>
                 </div>
             )}
 
