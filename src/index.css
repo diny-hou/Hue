@@ -1201,10 +1201,22 @@ body {
   stroke-dasharray: 2 4;
 }
 
+.gesture-debug-ring.retrace-child,
+.gesture-debug-ring.retrace-grand {
+  stroke: #f472b6;
+  stroke-dasharray: 4 5;
+}
+
 .gesture-debug-ring.grand-out,
 .gesture-debug-ring.grand-pick,
 .gesture-debug-ring.grand-pick-hybrid {
   stroke: #c77dff;
+}
+
+.gesture-capture-segment {
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  opacity: 0.9;
 }
 
 .gesture-debug-hud {

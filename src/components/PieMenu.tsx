@@ -18,6 +18,69 @@ export interface AppearanceConfig {
     sub_panel_text_size?: number;
     sub_panel_text_color?: string;
     gesture_path_debug?: boolean;
+    gesture_path_capture?: boolean;
+    /** Below: child may switch by angle. At/above: child freezes (skim-safe). */
+    gesture_child_switch_max?: number;
+    gesture_grand_enter?: number;
+    gesture_grand_enter_hybrid?: number;
+    /** On entry sector only — drop grand below this radius. */
+    gesture_retrace_grand?: number;
+    /** On entry sector only — drop child below this radius. */
+    gesture_retrace_child?: number;
+}
+
+type GestureZone = 'dead' | 'parent' | 'switch' | 'freeze' | 'grand' | 'retrace';
+
+type CaptureSample = {
+    t: number;
+    x: number;
+    y: number;
+    dist: number;
+    angle: number;
+    lock: number;
+    child: number | null;
+    grand: number | null;
+    zone: GestureZone;
+    childSwitchable: boolean;
+    event?: string;
+};
+
+function resolveGestureThresholds(appearance?: AppearanceConfig | null) {
+    return {
+        childSwitchMax: appearance?.gesture_child_switch_max ?? 250,
+        grandEnter: appearance?.gesture_grand_enter ?? 300,
+        grandEnterHybrid: appearance?.gesture_grand_enter_hybrid ?? 320,
+        retraceGrand: appearance?.gesture_retrace_grand ?? 180,
+        retraceChild: appearance?.gesture_retrace_child ?? 140,
+    };
+}
+
+function classifyZone(
+    distance: number,
+    childPickMin: number,
+    th: ReturnType<typeof resolveGestureThresholds>,
+    onEntryPath: boolean,
+    lockLevel: number,
+): GestureZone {
+    if (distance < 40) return 'dead';
+    if (
+        onEntryPath
+        && lockLevel >= 1
+        && distance < th.retraceChild
+    ) {
+        return 'retrace';
+    }
+    if (
+        onEntryPath
+        && lockLevel >= 2
+        && distance < th.retraceGrand
+    ) {
+        return 'retrace';
+    }
+    if (distance >= th.grandEnter) return 'grand';
+    if (distance >= th.childSwitchMax) return 'freeze';
+    if (distance >= childPickMin) return 'switch';
+    return 'parent';
 }
 
 export interface MenuConfig {
@@ -100,8 +163,11 @@ export const PieMenu: React.FC = () => {
     const lastShowTimeRef = React.useRef(0);
     const clickThroughStateRef = React.useRef({ editorOpen: false, hitDiskRadius: 180 });
     const trailRef = React.useRef<{ x: number; y: number }[]>([]);
+    const captureRef = React.useRef<CaptureSample[]>([]);
+    const gestureStartMsRef = React.useRef(0);
     const debugReviewTimerRef = React.useRef<number | null>(null);
     const [gestureTrail, setGestureTrail] = useState<{ x: number; y: number }[]>([]);
+    const [captureTrail, setCaptureTrail] = useState<CaptureSample[]>([]);
     const [debugHud, setDebugHud] = useState<{
         lock: number;
         dist: number;
@@ -109,6 +175,8 @@ export const PieMenu: React.FC = () => {
         main: number | null;
         child: number | null;
         grand: number | null;
+        zone: GestureZone;
+        childSwitchable: boolean;
     } | null>(null);
 
     useEffect(() => {
@@ -306,10 +374,13 @@ export const PieMenu: React.FC = () => {
     const childHalfSlice = childSliceAngle / 2;
 
     const gestureDebug = !!configFull?.appearance?.gesture_path_debug;
+    const gestureCapture = !!configFull?.appearance?.gesture_path_capture;
+    const showGestureOverlay = gestureDebug || gestureCapture;
+    const th = resolveGestureThresholds(configFull?.appearance);
     const DEAD_ZONE = 40;
 
     const pushTrailPoint = (x: number, y: number) => {
-        if (!gestureDebug) return;
+        if (!showGestureOverlay) return;
         const trail = trailRef.current;
         const last = trail[trail.length - 1];
         if (last) {
@@ -322,6 +393,35 @@ export const PieMenu: React.FC = () => {
         setGestureTrail([...trail]);
     };
 
+    const pushCaptureSample = (sample: CaptureSample) => {
+        if (!gestureCapture) return;
+        const samples = captureRef.current;
+        const last = samples[samples.length - 1];
+        if (last) {
+            const dx = sample.x - last.x;
+            const dy = sample.y - last.y;
+            if (dx * dx + dy * dy < 16 && !sample.event) return;
+        }
+        samples.push(sample);
+        if (samples.length > 600) samples.shift();
+        setCaptureTrail([...samples]);
+    };
+
+    const finalizeCapture = () => {
+        if (!gestureCapture || captureRef.current.length === 0) return;
+        const payload = {
+            at: new Date().toISOString(),
+            thresholds: th,
+            samples: captureRef.current,
+        };
+        try {
+            localStorage.setItem('hue_last_gesture_capture', JSON.stringify(payload));
+        } catch {
+            /* ignore quota */
+        }
+        console.log('[Hue gesture capture]', payload);
+    };
+
     const syncSelectionFromSticky = () => {
         updateActiveChildIndex(stickyChildRef.current);
         setActiveGrandchildIndex(stickyGrandRef.current);
@@ -330,6 +430,8 @@ export const PieMenu: React.FC = () => {
     const dismissMenu = () => {
         trailRef.current = [];
         setGestureTrail([]);
+        captureRef.current = [];
+        setCaptureTrail([]);
         setDebugHud(null);
         setIsVisible(false);
         updateActiveIndex(null);
@@ -355,6 +457,8 @@ export const PieMenu: React.FC = () => {
         const launchChild = stickyChildRef.current;
         const launchGrand = stickyGrandRef.current;
         const launchMain = lockedMainRef.current ?? hoveredIndexRef.current;
+
+        finalizeCapture();
 
         lockLevelRef.current = 0;
         lockedMainRef.current = null;
@@ -396,6 +500,10 @@ export const PieMenu: React.FC = () => {
     const handlePointerDown = (e: React.PointerEvent) => {
         if (e.button !== 0) return;
         if (isEditorOpenRef.current) return;
+        if (debugReviewTimerRef.current !== null) {
+            window.clearTimeout(debugReviewTimerRef.current);
+            debugReviewTimerRef.current = null;
+        }
         isDraggingRef.current = true;
         setIsDragging(true);
         lockLevelRef.current = 0;
@@ -405,6 +513,9 @@ export const PieMenu: React.FC = () => {
         childLockedRef.current = false;
         trailRef.current = [];
         setGestureTrail([]);
+        captureRef.current = [];
+        setCaptureTrail([]);
+        gestureStartMsRef.current = performance.now();
         // Capture so release outside the hit-disk still ends the gesture and hides the menu
         try {
             (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -432,13 +543,20 @@ export const PieMenu: React.FC = () => {
         angleDeg = (angleDeg + 90 + 360) % 360;
         lastAngleRef.current = angleDeg;
 
-        pushTrailPoint(center + dx, center + dy);
+        const px = center + dx;
+        const py = center + dy;
+        pushTrailPoint(px, py);
 
         const adjusted = (angleDeg + halfSlice) % 360;
         const potentialMainIndex = Math.floor(adjusted / sliceAngle);
         const childAdjusted = (angleDeg + childHalfSlice) % 360;
         const potentialChildIndex = Math.floor(childAdjusted / childSliceAngle);
         const potentialGrandIndex = potentialChildIndex;
+
+        let captureEvent: string | undefined;
+        const prevChild = stickyChildRef.current;
+        const prevGrand = stickyGrandRef.current;
+        const prevLock = lockLevelRef.current;
 
         // ── Level 0: free main selection; lock into a group when entering its ring ──
         if (lockLevelRef.current === 0) {
@@ -451,75 +569,124 @@ export const PieMenu: React.FC = () => {
                 if (isGroupItem(main) && distance >= innerRadius) {
                     lockedMainRef.current = potentialMainIndex;
                     lockLevelRef.current = 1;
+                    captureEvent = 'enter_child_ring';
                 }
             }
         }
 
         const lockedMain = lockedMainRef.current;
+        const mainHasPath = lockedMain !== null ? !!items[lockedMain]?.path : false;
+        const childPickMin = mainHasPath ? 140 : 70;
 
-        // ── Level 1: child ring stays open once entered; angle still switches siblings ──
+        // ── Level 1: switch zone vs freeze zone; retrace only on entry sector ──
         if (lockLevelRef.current === 1 && lockedMain !== null) {
-            const mainHasPath = !!items[lockedMain]?.path;
-            const childPickMin = mainHasPath ? 140 : 70;
+            const onChildPath =
+                stickyChildRef.current !== null && potentialChildIndex === stickyChildRef.current;
 
-            if (distance >= childPickMin
-                && potentialChildIndex >= 0
-                && potentialChildIndex < maxChildrenVisible) {
-                stickyChildRef.current = potentialChildIndex;
-                stickyGrandRef.current = null;
-                childLockedRef.current = true; // ring stays open even if you wander to center later
-                syncSelectionFromSticky();
-            } else if (childLockedRef.current) {
-                // Center / parent band: keep last child highlighted, do not close
-                syncSelectionFromSticky();
-            } else if (distance < DEAD_ZONE) {
+            if (distance < DEAD_ZONE) {
                 stickyChildRef.current = null;
                 stickyGrandRef.current = null;
+                childLockedRef.current = false;
+                lockLevelRef.current = 0;
+                lockedMainRef.current = null;
+                updateActiveIndex(null);
+                captureEvent = captureEvent ?? 'dead_unlock';
                 syncSelectionFromSticky();
-            }
-
-            if (childLockedRef.current && stickyChildRef.current !== null) {
-                const childItem = items[lockedMain]?.children?.[stickyChildRef.current];
-                if (isGroupItem(childItem)) {
-                    const grandEnter = childItem?.path ? 320 : 300;
-                    if (distance >= grandEnter) {
-                        lockLevelRef.current = 2;
-                    }
-                }
-            }
-        }
-
-        // ── Level 2: grand ring stays open; angle switches grandchildren (and children in mid ring) ──
-        if (lockLevelRef.current === 2 && lockedMain !== null) {
-            const mainHasPath = !!items[lockedMain]?.path;
-            const childPickMin = mainHasPath ? 140 : 70;
-            childLockedRef.current = true;
-
-            if (
-                stickyChildRef.current !== null
-                && distance >= (items[lockedMain]?.children?.[stickyChildRef.current]?.path ? 320 : 300)
-                && potentialGrandIndex >= 0
-                && potentialGrandIndex < maxChildrenVisible
+            } else if (
+                childLockedRef.current
+                && stickyChildRef.current !== null
+                && onChildPath
+                && distance < th.retraceChild
             ) {
-                // In grand ring — pick any grandchild by angle
-                stickyGrandRef.current = potentialGrandIndex;
+                // Retrace entry corridor → drop child (not via other sectors / center alone)
+                stickyChildRef.current = null;
+                stickyGrandRef.current = null;
+                childLockedRef.current = false;
+                captureEvent = captureEvent ?? 'retrace_child';
+                syncSelectionFromSticky();
             } else if (
                 distance >= childPickMin
+                && distance < th.childSwitchMax
                 && potentialChildIndex >= 0
                 && potentialChildIndex < maxChildrenVisible
             ) {
-                // Back in child ring — switch child freely; clear grand until pushed out again
+                // SWITCH ZONE — child may change (pick target before committing outward)
                 if (stickyChildRef.current !== potentialChildIndex) {
+                    captureEvent = captureEvent ?? 'child_switch';
+                }
+                stickyChildRef.current = potentialChildIndex;
+                stickyGrandRef.current = null;
+                childLockedRef.current = false;
+                syncSelectionFromSticky();
+            } else if (distance >= th.childSwitchMax) {
+                // FREEZE ZONE — child sticks; skimming other child angles does not switch
+                if (
+                    stickyChildRef.current === null
+                    && potentialChildIndex >= 0
+                    && potentialChildIndex < maxChildrenVisible
+                ) {
                     stickyChildRef.current = potentialChildIndex;
-                    stickyGrandRef.current = null;
+                    captureEvent = captureEvent ?? 'child_commit';
                 }
-                const childItem = items[lockedMain]?.children?.[stickyChildRef.current];
-                if (!isGroupItem(childItem)) {
-                    lockLevelRef.current = 1;
+                if (stickyChildRef.current !== null) {
+                    childLockedRef.current = true;
                     stickyGrandRef.current = null;
+                    const childItem = items[lockedMain]?.children?.[stickyChildRef.current];
+                    if (isGroupItem(childItem)) {
+                        const grandEnter = childItem?.path ? th.grandEnterHybrid : th.grandEnter;
+                        if (distance >= grandEnter) {
+                            lockLevelRef.current = 2;
+                            captureEvent = captureEvent ?? 'grand_enter';
+                        }
+                    }
                 }
+                syncSelectionFromSticky();
+            } else if (childLockedRef.current || stickyChildRef.current !== null) {
+                // Parent band off-path: keep selection, do not close via wrong sector
+                syncSelectionFromSticky();
             }
-            // Center / elsewhere: keep last child+grand selection, rings stay open
+        }
+
+        // ── Level 2: grand by angle; child frozen; retreat only on entry corridor ──
+        if (lockLevelRef.current === 2 && lockedMain !== null) {
+            childLockedRef.current = true;
+            const stickyChild = stickyChildRef.current;
+            const onChildPath =
+                stickyChild !== null && potentialChildIndex === stickyChild;
+            const childItem = stickyChild !== null
+                ? items[lockedMain]?.children?.[stickyChild]
+                : undefined;
+            const grandEnter = childItem?.path ? th.grandEnterHybrid : th.grandEnter;
+
+            if (distance < DEAD_ZONE) {
+                stickyChildRef.current = null;
+                stickyGrandRef.current = null;
+                childLockedRef.current = false;
+                lockLevelRef.current = 0;
+                lockedMainRef.current = null;
+                updateActiveIndex(null);
+                captureEvent = captureEvent ?? 'dead_unlock';
+            } else if (onChildPath && distance < th.retraceGrand) {
+                stickyGrandRef.current = null;
+                lockLevelRef.current = 1;
+                captureEvent = captureEvent ?? 'retrace_grand';
+                if (distance < th.retraceChild) {
+                    stickyChildRef.current = null;
+                    childLockedRef.current = false;
+                    captureEvent = 'retrace_child';
+                }
+            } else if (
+                stickyChild !== null
+                && distance >= grandEnter
+                && potentialGrandIndex >= 0
+                && potentialGrandIndex < maxChildrenVisible
+            ) {
+                if (stickyGrandRef.current !== potentialGrandIndex) {
+                    captureEvent = captureEvent ?? 'grand_switch';
+                }
+                stickyGrandRef.current = potentialGrandIndex;
+            }
+            // Off-path / mid freeze: keep child+grand — brush other children without switching
             syncSelectionFromSticky();
         }
 
@@ -530,7 +697,21 @@ export const PieMenu: React.FC = () => {
             clickThroughStateRef.current.hitDiskRadius = childOuterRadius;
         }
 
-        if (gestureDebug) {
+        const onEntryPath =
+            stickyChildRef.current !== null && potentialChildIndex === stickyChildRef.current;
+        const zone = classifyZone(
+            distance,
+            childPickMin,
+            th,
+            onEntryPath,
+            lockLevelRef.current,
+        );
+        const childSwitchable =
+            lockLevelRef.current === 1
+            && distance >= childPickMin
+            && distance < th.childSwitchMax;
+
+        if (showGestureOverlay) {
             setDebugHud({
                 lock: lockLevelRef.current,
                 dist: Math.round(distance),
@@ -538,6 +719,28 @@ export const PieMenu: React.FC = () => {
                 main: lockedMainRef.current ?? hoveredIndexRef.current,
                 child: stickyChildRef.current,
                 grand: stickyGrandRef.current,
+                zone,
+                childSwitchable,
+            });
+        }
+
+        if (gestureCapture) {
+            const switched =
+                prevChild !== stickyChildRef.current
+                || prevGrand !== stickyGrandRef.current
+                || prevLock !== lockLevelRef.current;
+            pushCaptureSample({
+                t: Math.round(performance.now() - gestureStartMsRef.current),
+                x: px,
+                y: py,
+                dist: Math.round(distance),
+                angle: Math.round(angleDeg),
+                lock: lockLevelRef.current,
+                child: stickyChildRef.current,
+                grand: stickyGrandRef.current,
+                zone,
+                childSwitchable,
+                event: captureEvent ?? (switched ? 'state_change' : undefined),
             });
         }
     };
@@ -804,7 +1007,7 @@ export const PieMenu: React.FC = () => {
             </svg>
 
             {/* Unrotated overlay: pie-svg uses rotate(-90deg), so trail/rings must live outside it */}
-            {gestureDebug && (
+            {showGestureOverlay && (
                 <svg
                     className="gesture-debug-overlay"
                     viewBox={`0 0 ${size} ${size}`}
@@ -816,26 +1019,53 @@ export const PieMenu: React.FC = () => {
                         <circle cx={center} cy={center} r={outerRadius} className="gesture-debug-ring main-out" />
                         <circle cx={center} cy={center} r={childOuterRadius} className="gesture-debug-ring child-out" />
                         <circle cx={center} cy={center} r={grandOuterRadius} className="gesture-debug-ring grand-out" />
-                        <circle cx={center} cy={center} r={140} className="gesture-debug-ring child-pick" />
-                        <circle cx={center} cy={center} r={250} className="gesture-debug-ring child-commit" />
-                        <circle cx={center} cy={center} r={300} className="gesture-debug-ring grand-pick" />
-                        <circle cx={center} cy={center} r={320} className="gesture-debug-ring grand-pick-hybrid" />
+                        <circle cx={center} cy={center} r={th.retraceChild} className="gesture-debug-ring retrace-child" />
+                        <circle cx={center} cy={center} r={th.retraceGrand} className="gesture-debug-ring retrace-grand" />
+                        <circle cx={center} cy={center} r={th.childSwitchMax} className="gesture-debug-ring child-commit" />
+                        <circle cx={center} cy={center} r={th.grandEnter} className="gesture-debug-ring grand-pick" />
+                        <circle cx={center} cy={center} r={th.grandEnterHybrid} className="gesture-debug-ring grand-pick-hybrid" />
                     </g>
-                    {gestureTrail.length > 1 && (
-                        <polyline
-                            className="gesture-debug-trail"
-                            fill="none"
-                            points={gestureTrail.map(p => `${p.x},${p.y}`).join(' ')}
-                        />
-                    )}
-                    {gestureTrail.length > 0 && (
-                        <circle
-                            className="gesture-debug-cursor"
-                            cx={gestureTrail[gestureTrail.length - 1].x}
-                            cy={gestureTrail[gestureTrail.length - 1].y}
-                            r={6}
-                        />
-                    )}
+                    {gestureCapture && captureTrail.length > 1
+                        ? captureTrail.slice(1).map((sample, i) => {
+                            const prev = captureTrail[i];
+                            const zoneColor =
+                                sample.zone === 'switch' ? '#4ade80'
+                                    : sample.zone === 'freeze' ? '#fbbf24'
+                                        : sample.zone === 'grand' ? '#38bdf8'
+                                            : sample.zone === 'retrace' ? '#f472b6'
+                                                : sample.zone === 'dead' ? '#94a3b8'
+                                                    : '#a78bfa';
+                            return (
+                                <line
+                                    key={`cap-${i}-${sample.t}`}
+                                    className="gesture-capture-segment"
+                                    x1={prev.x}
+                                    y1={prev.y}
+                                    x2={sample.x}
+                                    y2={sample.y}
+                                    stroke={zoneColor}
+                                />
+                            );
+                        })
+                        : gestureTrail.length > 1 && (
+                            <polyline
+                                className="gesture-debug-trail"
+                                fill="none"
+                                points={gestureTrail.map(p => `${p.x},${p.y}`).join(' ')}
+                            />
+                        )}
+                    {(gestureCapture ? captureTrail : gestureTrail).length > 0 && (() => {
+                        const pts = gestureCapture ? captureTrail : gestureTrail;
+                        const last = pts[pts.length - 1];
+                        return (
+                            <circle
+                                className="gesture-debug-cursor"
+                                cx={last.x}
+                                cy={last.y}
+                                r={6}
+                            />
+                        );
+                    })()}
                 </svg>
             )}
 
@@ -992,11 +1222,15 @@ export const PieMenu: React.FC = () => {
                 <div className="center-text">HUE</div>
             </div>
 
-            {gestureDebug && debugHud && (
+            {showGestureOverlay && debugHud && (
                 <div className="gesture-debug-hud" style={{ pointerEvents: 'none' }}>
-                    <div>lock {debugHud.lock} · dist {debugHud.dist} · ang {debugHud.angle}°</div>
+                    <div>lock {debugHud.lock} · dist {debugHud.dist} · ang {debugHud.angle}° · zone {debugHud.zone}</div>
                     <div>main {debugHud.main ?? '—'} · child {debugHud.child ?? '—'} · grand {debugHud.grand ?? '—'}</div>
-                    <div className="gesture-debug-hud-hint">rings stay open · angle switches siblings</div>
+                    <div className="gesture-debug-hud-hint">
+                        child {debugHud.childSwitchable ? 'SWITCHABLE' : 'FROZEN'}
+                        {' · '}switch&lt;{th.childSwitchMax} · freeze≥{th.childSwitchMax} · grand≥{th.grandEnter}
+                        {gestureCapture ? ' · capture→console/localStorage' : ''}
+                    </div>
                 </div>
             )}
 

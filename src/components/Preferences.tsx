@@ -66,6 +66,12 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     const [hoverScale, setHoverScale] = useState(config.appearance?.hover_scale ?? 'small');
     const [hoverAnim, setHoverAnim] = useState(config.appearance?.hover_animation || 'none');
     const [gesturePathDebug, setGesturePathDebug] = useState(!!config.appearance?.gesture_path_debug);
+    const [gesturePathCapture, setGesturePathCapture] = useState(!!config.appearance?.gesture_path_capture);
+    const [childSwitchMax, setChildSwitchMax] = useState(config.appearance?.gesture_child_switch_max ?? 250);
+    const [grandEnter, setGrandEnter] = useState(config.appearance?.gesture_grand_enter ?? 300);
+    const [grandEnterHybrid, setGrandEnterHybrid] = useState(config.appearance?.gesture_grand_enter_hybrid ?? 320);
+    const [retraceGrand, setRetraceGrand] = useState(config.appearance?.gesture_retrace_grand ?? 180);
+    const [retraceChild, setRetraceChild] = useState(config.appearance?.gesture_retrace_child ?? 140);
 
     const [isRecording, setIsRecording] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -168,6 +174,12 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                     hover_scale: hoverScale,
                     hover_animation: hoverAnim,
                     gesture_path_debug: gesturePathDebug,
+                    gesture_path_capture: gesturePathCapture,
+                    gesture_child_switch_max: childSwitchMax,
+                    gesture_grand_enter: grandEnter,
+                    gesture_grand_enter_hybrid: grandEnterHybrid,
+                    gesture_retrace_grand: retraceGrand,
+                    gesture_retrace_child: retraceChild,
                 }
             };
             await invoke('update_config', { newConfig });
@@ -506,9 +518,92 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         </div>
                         <div className="pref-row" style={{ marginTop: '4px' }}>
                             <small style={{ color: '#aaa' }}>
-                                Show trail, ring thresholds, and lock HUD while dragging. Apply to enable.
+                                Show trail, threshold rings, and lock HUD while dragging.
                             </small>
                         </div>
+                        <div className="pref-row" style={{ marginTop: '12px' }}>
+                            <label>Gesture Path Capture</label>
+                            <label className="toggle-switch">
+                                <input
+                                    type="checkbox"
+                                    checked={gesturePathCapture}
+                                    onChange={(e) => setGesturePathCapture(e.target.checked)}
+                                />
+                                <span className="slider round"></span>
+                            </label>
+                        </div>
+                        <div className="pref-row" style={{ marginTop: '4px' }}>
+                            <small style={{ color: '#aaa' }}>
+                                Color trail by zone (green=child switchable, amber=frozen, cyan=grand, pink=retrace).
+                                On release, samples go to DevTools console and localStorage key hue_last_gesture_capture.
+                            </small>
+                        </div>
+
+                        <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
+                            <label style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>Gesture Thresholds</label>
+                        </div>
+                        <div className="pref-row" style={{ marginTop: '4px' }}>
+                            <small style={{ color: '#aaa' }}>
+                                Below Child Switch Max: child may change. At/above: child freezes so you can skim other children toward a grand.
+                                Retrace radii only apply on the entry sector (corridor back).
+                            </small>
+                        </div>
+                        <div className="pref-row">
+                            <label>Child Switch Max ({childSwitchMax})</label>
+                            <input
+                                type="range"
+                                min={160}
+                                max={300}
+                                step={5}
+                                value={childSwitchMax}
+                                onChange={(e) => setChildSwitchMax(Number(e.target.value))}
+                            />
+                        </div>
+                        <div className="pref-row">
+                            <label>Grand Enter ({grandEnter})</label>
+                            <input
+                                type="range"
+                                min={260}
+                                max={380}
+                                step={5}
+                                value={grandEnter}
+                                onChange={(e) => setGrandEnter(Number(e.target.value))}
+                            />
+                        </div>
+                        <div className="pref-row">
+                            <label>Grand Enter Hybrid ({grandEnterHybrid})</label>
+                            <input
+                                type="range"
+                                min={280}
+                                max={400}
+                                step={5}
+                                value={grandEnterHybrid}
+                                onChange={(e) => setGrandEnterHybrid(Number(e.target.value))}
+                            />
+                        </div>
+                        <div className="pref-row">
+                            <label>Retrace Grand ({retraceGrand})</label>
+                            <input
+                                type="range"
+                                min={100}
+                                max={280}
+                                step={5}
+                                value={retraceGrand}
+                                onChange={(e) => setRetraceGrand(Number(e.target.value))}
+                            />
+                        </div>
+                        <div className="pref-row">
+                            <label>Retrace Child ({retraceChild})</label>
+                            <input
+                                type="range"
+                                min={70}
+                                max={220}
+                                step={5}
+                                value={retraceChild}
+                                onChange={(e) => setRetraceChild(Number(e.target.value))}
+                            />
+                        </div>
+
                         <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
                             <label>Software Update</label>
                             <div className="pref-update-actions">
