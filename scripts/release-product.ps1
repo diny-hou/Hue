@@ -118,8 +118,12 @@ if (-not $SkipPush) {
 }
 
 $releaseExists = $false
-gh release view $tag -R diny-hou/Hue 2>$null | Out-Null
-if ($LASTEXITCODE -eq 0) { $releaseExists = $true }
+try {
+    gh release view $tag -R diny-hou/Hue 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) { $releaseExists = $true }
+} catch {
+    $releaseExists = $false
+}
 
 if ($releaseExists) {
     Write-Host "Updating existing release $tag ..."
