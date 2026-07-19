@@ -27,6 +27,24 @@ pub struct AppearanceConfig {
     pub sub_panel_text_color: String,
     #[serde(default)]
     pub gesture_path_debug: bool,
+    /// Record rich gesture samples (zones / child-switch events) for tuning thresholds.
+    #[serde(default)]
+    pub gesture_path_capture: bool,
+    /// Below this radius (pie px), child may switch by angle. At/above: child freezes.
+    #[serde(default = "default_gesture_child_switch_max")]
+    pub gesture_child_switch_max: f32,
+    /// Enter grandchild selection at/above this radius (folder child).
+    #[serde(default = "default_gesture_grand_enter")]
+    pub gesture_grand_enter: f32,
+    /// Enter grandchild selection for hybrid child (has path + children).
+    #[serde(default = "default_gesture_grand_enter_hybrid")]
+    pub gesture_grand_enter_hybrid: f32,
+    /// On entry sector only: drop grand when distance falls below this.
+    #[serde(default = "default_gesture_retrace_grand")]
+    pub gesture_retrace_grand: f32,
+    /// On entry sector only: drop child when distance falls below this.
+    #[serde(default = "default_gesture_retrace_child")]
+    pub gesture_retrace_child: f32,
 }
 
 fn default_hover_animation() -> String {
@@ -57,6 +75,26 @@ fn default_text_color() -> String {
     "#ffffff".to_string()
 }
 
+fn default_gesture_child_switch_max() -> f32 {
+    250.0
+}
+
+fn default_gesture_grand_enter() -> f32 {
+    300.0
+}
+
+fn default_gesture_grand_enter_hybrid() -> f32 {
+    320.0
+}
+
+fn default_gesture_retrace_grand() -> f32 {
+    180.0
+}
+
+fn default_gesture_retrace_child() -> f32 {
+    140.0
+}
+
 impl Default for AppearanceConfig {
     fn default() -> Self {
         Self {
@@ -74,6 +112,12 @@ impl Default for AppearanceConfig {
             sub_panel_text_size: default_sub_panel_text_size(),
             sub_panel_text_color: default_text_color(),
             gesture_path_debug: false,
+            gesture_path_capture: false,
+            gesture_child_switch_max: default_gesture_child_switch_max(),
+            gesture_grand_enter: default_gesture_grand_enter(),
+            gesture_grand_enter_hybrid: default_gesture_grand_enter_hybrid(),
+            gesture_retrace_grand: default_gesture_retrace_grand(),
+            gesture_retrace_child: default_gesture_retrace_child(),
         }
     }
 }
