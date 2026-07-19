@@ -81,6 +81,7 @@ export const PieMenu: React.FC = () => {
     const [activeGrandchildIndex, setActiveGrandchildIndex] = useState<number | null>(null);
     const [isVisible, setIsVisible] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    const isDraggingRef = React.useRef(false);
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [editingChildIndex, setEditingChildIndex] = useState<number | null>(null);
     const [editingGrandchildIndex, setEditingGrandchildIndex] = useState<number | null>(null);
@@ -326,9 +327,76 @@ export const PieMenu: React.FC = () => {
         setActiveGrandchildIndex(stickyGrandRef.current);
     };
 
+    const dismissMenu = () => {
+        trailRef.current = [];
+        setGestureTrail([]);
+        setDebugHud(null);
+        setIsVisible(false);
+        updateActiveIndex(null);
+        updateActiveChildIndex(null);
+        setActiveGrandchildIndex(null);
+        invoke('hide_menu').catch(console.error);
+    };
+
+    const endDragGesture = (e?: { currentTarget?: EventTarget | null; pointerId?: number }) => {
+        if (!isDraggingRef.current) return;
+        if (isEditorOpenRef.current) return;
+        isDraggingRef.current = false;
+        setIsDragging(false);
+
+        if (e?.currentTarget && e.pointerId !== undefined) {
+            try {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+            } catch {
+                /* ignore */
+            }
+        }
+
+        const launchChild = stickyChildRef.current;
+        const launchGrand = stickyGrandRef.current;
+        const launchMain = lockedMainRef.current ?? hoveredIndexRef.current;
+
+        lockLevelRef.current = 0;
+        lockedMainRef.current = null;
+        stickyChildRef.current = null;
+        stickyGrandRef.current = null;
+        childLockedRef.current = false;
+
+        if (launchMain !== null) {
+            const currentItem = configRef.current[launchMain];
+            const launchIfAssigned = (path: string | undefined) => {
+                const p = path?.trim();
+                if (p) invoke('launch_app', { path: p }).catch(console.error);
+            };
+
+            if (lastDistanceRef.current < DEAD_ZONE) {
+                // Canceled in center — still dismiss below
+            } else if (
+                launchChild !== null &&
+                launchGrand !== null &&
+                currentItem.children &&
+                currentItem.children.length > launchChild
+            ) {
+                const grandItem = currentItem.children[launchChild].children?.[launchGrand];
+                launchIfAssigned(grandItem?.path);
+            } else if (launchChild !== null && currentItem.children && currentItem.children.length > launchChild) {
+                launchIfAssigned(currentItem.children[launchChild]?.path);
+            } else {
+                launchIfAssigned(currentItem.path);
+            }
+        }
+
+        if (debugReviewTimerRef.current !== null) {
+            window.clearTimeout(debugReviewTimerRef.current);
+            debugReviewTimerRef.current = null;
+        }
+        dismissMenu();
+    };
+
     const handlePointerDown = (e: React.PointerEvent) => {
         if (e.button !== 0) return;
         if (isEditorOpenRef.current) return;
+        isDraggingRef.current = true;
         setIsDragging(true);
         lockLevelRef.current = 0;
         lockedMainRef.current = null;
@@ -337,11 +405,17 @@ export const PieMenu: React.FC = () => {
         childLockedRef.current = false;
         trailRef.current = [];
         setGestureTrail([]);
+        // Capture so release outside the hit-disk still ends the gesture and hides the menu
+        try {
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        } catch {
+            /* ignore */
+        }
         handlePointerMove(e);
     };
 
     const handlePointerMove = (e: React.PointerEvent) => {
-        if (!isDragging) {
+        if (!isDraggingRef.current) {
             return;
         }
 
@@ -469,74 +543,28 @@ export const PieMenu: React.FC = () => {
 
     const handlePointerUp = (e: React.PointerEvent) => {
         if (e.button !== 0) return;
-        if (!isDragging) return;
-        if (isEditorOpenRef.current) return;
-        setIsDragging(false);
-
-        const launchChild = stickyChildRef.current;
-        const launchGrand = stickyGrandRef.current;
-        const launchMain = lockedMainRef.current ?? activeIndex;
-
-        lockLevelRef.current = 0;
-        lockedMainRef.current = null;
-        stickyChildRef.current = null;
-        stickyGrandRef.current = null;
-        childLockedRef.current = false;
-
-        if (launchMain !== null) {
-            const currentItem = configRef.current[launchMain];
-            const launchIfAssigned = (path: string | undefined) => {
-                const p = path?.trim();
-                if (p) invoke('launch_app', { path: p }).catch(console.error);
-            };
-
-            if (lastDistanceRef.current < DEAD_ZONE) {
-                // Canceled in center
-            } else if (
-                launchChild !== null &&
-                launchGrand !== null &&
-                currentItem.children &&
-                currentItem.children.length > launchChild
-            ) {
-                // Final pick is a grandchild slot — empty means launch nothing (no parent fallback)
-                const grandItem = currentItem.children[launchChild].children?.[launchGrand];
-                launchIfAssigned(grandItem?.path);
-            } else if (launchChild !== null && currentItem.children && currentItem.children.length > launchChild) {
-                // Final pick is a child slot — empty means launch nothing
-                launchIfAssigned(currentItem.children[launchChild]?.path);
-            } else {
-                launchIfAssigned(currentItem.path);
-            }
-        }
-
-        if (gestureDebug && trailRef.current.length > 0) {
-            // Keep trail + HUD visible briefly so the path can be inspected
-            if (debugReviewTimerRef.current !== null) {
-                window.clearTimeout(debugReviewTimerRef.current);
-            }
-            debugReviewTimerRef.current = window.setTimeout(() => {
-                debugReviewTimerRef.current = null;
-                trailRef.current = [];
-                setGestureTrail([]);
-                setDebugHud(null);
-                setIsVisible(false);
-                updateActiveIndex(null);
-                updateActiveChildIndex(null);
-                setActiveGrandchildIndex(null);
-                invoke('hide_menu').catch(console.error);
-            }, 2800);
-            return;
-        }
-
-        trailRef.current = [];
-        setGestureTrail([]);
-        setDebugHud(null);
-        setIsVisible(false);
-        updateActiveIndex(null);
-        updateActiveChildIndex(null);
-        setActiveGrandchildIndex(null);
-        invoke('hide_menu').catch(console.error);
+        endDragGesture(e);
     };
+
+    const handlePointerCancel = (e: React.PointerEvent) => {
+        endDragGesture(e);
+    };
+
+    // Backup: if capture fails, window still ends the drag when releasing outside the pie
+    useEffect(() => {
+        if (!isDragging) return;
+        const onWinUp = (ev: PointerEvent) => {
+            if (ev.button !== 0) return;
+            endDragGesture();
+        };
+        const onWinCancel = () => endDragGesture();
+        window.addEventListener('pointerup', onWinUp);
+        window.addEventListener('pointercancel', onWinCancel);
+        return () => {
+            window.removeEventListener('pointerup', onWinUp);
+            window.removeEventListener('pointercancel', onWinCancel);
+        };
+    }, [isDragging]);
 
     // Use onContextMenu to prevent the right-click menu, allowing drag with both left/right click.
     const handleContextMenu = (_e: React.MouseEvent) => _e.preventDefault();
@@ -658,6 +686,7 @@ export const PieMenu: React.FC = () => {
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
             onContextMenu={handleContextMenu}
             style={customStyles}
         >
