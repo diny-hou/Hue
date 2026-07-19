@@ -1014,7 +1014,16 @@ body {
   background: rgba(255, 255, 255, 0.18);
 }
 
-/* Toggle Switch relative to .pref-row */
+/* Toggle Switch — base sizing required wherever used (prefs + slice editor Auto) */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  margin: 0;
+  flex-shrink: 0;
+}
+
 .pref-row label.toggle-switch {
   position: relative;
   display: inline-block;
