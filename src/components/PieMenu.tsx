@@ -92,6 +92,8 @@ export const PieMenu: React.FC = () => {
     const lockedMainRef = React.useRef<number | null>(null);
     const stickyChildRef = React.useRef<number | null>(null);
     const stickyGrandRef = React.useRef<number | null>(null);
+    /** Once true, child won't clear/switch unless retreating on that child's sector (or dead zone). */
+    const childLockedRef = React.useRef(false);
     const lastDistanceRef = React.useRef(0);
     const lastAngleRef = React.useRef(0);
     const lastShowTimeRef = React.useRef(0);
@@ -159,6 +161,7 @@ export const PieMenu: React.FC = () => {
                 lockedMainRef.current = null;
                 stickyChildRef.current = null;
                 stickyGrandRef.current = null;
+                childLockedRef.current = false;
                 trailRef.current = [];
                 setGestureTrail([]);
                 setDebugHud(null);
@@ -181,6 +184,7 @@ export const PieMenu: React.FC = () => {
                 lockedMainRef.current = null;
                 stickyChildRef.current = null;
                 stickyGrandRef.current = null;
+                childLockedRef.current = false;
                 trailRef.current = [];
                 setGestureTrail([]);
                 setDebugHud(null);
@@ -330,6 +334,7 @@ export const PieMenu: React.FC = () => {
         lockedMainRef.current = null;
         stickyChildRef.current = null;
         stickyGrandRef.current = null;
+        childLockedRef.current = false;
         trailRef.current = [];
         setGestureTrail([]);
         handlePointerMove(e);
@@ -377,47 +382,60 @@ export const PieMenu: React.FC = () => {
         }
 
         const lockedMain = lockedMainRef.current;
+        // On the entry corridor = same 8-way sector as the locked child (ignore other diagonals)
+        const onChildPath =
+            stickyChildRef.current !== null && potentialChildIndex === stickyChildRef.current;
 
         // ── Level 1: parent locked ──
-        // Inner child band = free angle pick (find the group that has grandchildren).
-        // Outer child band = freeze that child (diagonal won't switch), then open grand.
+        // Free-pick until commit, then lock. Retreat to parent only on the entry sector.
         if (lockLevelRef.current === 1 && lockedMain !== null) {
             const mainHasPath = !!items[lockedMain]?.path;
             const childPickMin = mainHasPath ? 140 : 70;
-            // Mid child ring (180–300): pick freely below this, freeze above it
             const childCommit = 250;
 
             if (distance < DEAD_ZONE) {
+                // Center cancel — any angle
                 lockLevelRef.current = 0;
                 lockedMainRef.current = null;
                 stickyChildRef.current = null;
                 stickyGrandRef.current = null;
+                childLockedRef.current = false;
                 syncSelectionFromSticky();
-            } else if (distance < childPickMin) {
-                stickyChildRef.current = null;
-                stickyGrandRef.current = null;
-                syncSelectionFromSticky();
-            } else if (distance < childCommit) {
-                // Free pick — required so you can aim at a nested group before freezing
-                stickyChildRef.current =
-                    potentialChildIndex >= 0 && potentialChildIndex < maxChildrenVisible
-                        ? potentialChildIndex
-                        : null;
-                stickyGrandRef.current = null;
-                syncSelectionFromSticky();
-            } else {
-                // Frozen — keep child; ignore diagonal angle changes
-                if (stickyChildRef.current === null
-                    && potentialChildIndex >= 0
-                    && potentialChildIndex < maxChildrenVisible) {
-                    stickyChildRef.current = potentialChildIndex;
+            } else if (!childLockedRef.current) {
+                if (distance < childPickMin) {
+                    stickyChildRef.current = null;
+                    stickyGrandRef.current = null;
+                    syncSelectionFromSticky();
+                } else if (distance < childCommit) {
+                    stickyChildRef.current =
+                        potentialChildIndex >= 0 && potentialChildIndex < maxChildrenVisible
+                            ? potentialChildIndex
+                            : null;
+                    stickyGrandRef.current = null;
+                    syncSelectionFromSticky();
+                } else {
+                    if (stickyChildRef.current === null
+                        && potentialChildIndex >= 0
+                        && potentialChildIndex < maxChildrenVisible) {
+                        stickyChildRef.current = potentialChildIndex;
+                    }
+                    childLockedRef.current = stickyChildRef.current !== null;
+                    stickyGrandRef.current = null;
+                    syncSelectionFromSticky();
                 }
+            } else {
+                // Child locked: keep it. Only release when retracting on that child's sector.
                 stickyGrandRef.current = null;
+                if (onChildPath && distance < childPickMin) {
+                    stickyChildRef.current = null;
+                    childLockedRef.current = false;
+                }
                 syncSelectionFromSticky();
+            }
 
-                const childItem = stickyChildRef.current !== null
-                    ? items[lockedMain]?.children?.[stickyChildRef.current]
-                    : undefined;
+            // Open grand ring while locked on a group child
+            if (childLockedRef.current && stickyChildRef.current !== null) {
+                const childItem = items[lockedMain]?.children?.[stickyChildRef.current];
                 if (isGroupItem(childItem)) {
                     const grandEnter = childItem?.path ? 320 : 300;
                     if (distance >= grandEnter) {
@@ -427,37 +445,35 @@ export const PieMenu: React.FC = () => {
             }
         }
 
-        // ── Level 2: child frozen + first grandchild sticks ──
+        // ── Level 2: grandchild sticks; back only on the entry child sector ──
         if (lockLevelRef.current === 2 && lockedMain !== null && stickyChildRef.current !== null) {
             const childItem = items[lockedMain]?.children?.[stickyChildRef.current];
             const grandEnter = childItem?.path ? 320 : 300;
             const grandExit = grandEnter - 30;
             const childPickMin = !!items[lockedMain]?.path ? 140 : 70;
-            const childCommit = 250;
 
             if (distance < DEAD_ZONE) {
                 lockLevelRef.current = 0;
                 lockedMainRef.current = null;
                 stickyChildRef.current = null;
                 stickyGrandRef.current = null;
+                childLockedRef.current = false;
                 syncSelectionFromSticky();
-            } else if (distance < childPickMin) {
+            } else if (onChildPath && distance < childPickMin) {
+                // Retract on entry path past parent band → release child
                 lockLevelRef.current = 1;
                 stickyChildRef.current = null;
                 stickyGrandRef.current = null;
+                childLockedRef.current = false;
                 syncSelectionFromSticky();
-            } else if (distance < grandExit) {
-                // Leave grand ring; if still in commit zone keep frozen child, else free-pick zone
+            } else if (onChildPath && distance < grandExit) {
+                // Retract on entry path → drop grand only, keep locked child
                 lockLevelRef.current = 1;
                 stickyGrandRef.current = null;
-                if (distance < childCommit) {
-                    stickyChildRef.current =
-                        potentialChildIndex >= 0 && potentialChildIndex < maxChildrenVisible
-                            ? potentialChildIndex
-                            : stickyChildRef.current;
-                }
+                childLockedRef.current = true;
                 syncSelectionFromSticky();
             } else {
+                // Off the entry path: stay on grand level even if distance dips
                 if (stickyGrandRef.current === null
                     && potentialGrandIndex >= 0
                     && potentialGrandIndex < maxChildrenVisible) {
@@ -500,6 +516,7 @@ export const PieMenu: React.FC = () => {
         lockedMainRef.current = null;
         stickyChildRef.current = null;
         stickyGrandRef.current = null;
+        childLockedRef.current = false;
 
         if (launchMain !== null) {
             const currentItem = configRef.current[launchMain];
@@ -986,7 +1003,7 @@ export const PieMenu: React.FC = () => {
                 <div className="gesture-debug-hud" style={{ pointerEvents: 'none' }}>
                     <div>lock {debugHud.lock} · dist {debugHud.dist} · ang {debugHud.angle}°</div>
                     <div>main {debugHud.main ?? '—'} · child {debugHud.child ?? '—'} · grand {debugHud.grand ?? '—'}</div>
-                    <div className="gesture-debug-hud-hint">pick child &lt;250 · freeze ≥250 · grand ≥300</div>
+                    <div className="gesture-debug-hud-hint">back only on entry sector · center cancels</div>
                 </div>
             )}
 
