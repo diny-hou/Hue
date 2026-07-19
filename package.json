@@ -1,7 +1,7 @@
 {
   "name": "hue",
   "private": true,
-  "version": "1.2.3",
+  "version": "1.2.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,8 @@
     "update": "scripts\\hue-update.bat",
     "build:update": "scripts\\hue-update.bat",
     "update:app": "scripts\\hue-update.bat",
-    "build:exe": "tauri build --config src-tauri/tauri.build-no-sign.json"
+    "build:exe": "tauri build --config src-tauri/tauri.build-no-sign.json",
+    "release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-product.ps1"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
