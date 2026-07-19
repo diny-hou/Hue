@@ -284,6 +284,73 @@ body {
   fill: rgba(99, 102, 241, 0.25);
 }
 
+.outer-slice.auto-slice {
+  stroke: rgba(129, 140, 248, 0.55);
+  stroke-dasharray: 5 4;
+}
+
+.outer-slice.auto-slice.active {
+  fill: rgba(99, 102, 241, 0.32);
+  stroke: rgba(165, 180, 252, 0.85);
+}
+
+.auto-badge {
+  display: block;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(165, 180, 252, 0.85);
+  margin-bottom: 2px;
+  line-height: 1;
+}
+
+.slice-editor-auto-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.slice-editor-auto-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.slice-editor-auto-toggle {
+  flex-shrink: 0;
+}
+
+.slice-editor-auto-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.slice-editor-auto-preview-count {
+  color: rgba(165, 180, 252, 0.9);
+  font-weight: 600;
+}
+
+.slice-editor-auto-preview-item {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slice-editor-auto-preview-more {
+  opacity: 0.7;
+}
+
+.slice-editor-auto-preview-error {
+  color: #ff8a8a;
+}
+
 /* Override text styles for outer ring labels */
 .slice-content.outer-label {
   font-size: var(--sub-text-size, 12px);

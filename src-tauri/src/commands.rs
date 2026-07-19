@@ -1,4 +1,4 @@
-use crate::menu_logic::{self, MenuConfig};
+use crate::menu_logic::{self, AutoEntry, MenuConfig};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use serde::Deserialize;
@@ -230,6 +230,23 @@ pub fn close_preferences_window(app_handle: tauri::AppHandle) {
 }
 
 #[tauri::command]
+pub fn list_auto_entries(folder: String, tag: String) -> Result<Vec<AutoEntry>, String> {
+    menu_logic::list_auto_entries(&folder, &tag)
+}
+
+#[tauri::command]
+pub fn sync_auto_items(app_handle: tauri::AppHandle) -> MenuConfig {
+    let mut config = menu_logic::load_config(&app_handle);
+    if menu_logic::sync_auto_items(&mut config) {
+        menu_logic::save_config(&app_handle, &config);
+        if let Some(main) = app_handle.get_webview_window("main") {
+            let _ = main.emit("reload-config", ());
+        }
+    }
+    config
+}
+
+#[tauri::command]
 pub fn empty_all_slices(app_handle: tauri::AppHandle) {
     let mut config = menu_logic::load_config(&app_handle);
     config.items = (0..8)
@@ -237,6 +254,7 @@ pub fn empty_all_slices(app_handle: tauri::AppHandle) {
             name: String::new(),
             path: String::new(),
             children: vec![],
+            auto: None,
         })
         .collect();
     menu_logic::save_config(&app_handle, &config);

@@ -2,10 +2,17 @@ import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { FolderOpen, ArrowUp, ArrowDown, GripVertical } from 'lucide-react';
 
+export interface AutoConfig {
+    enabled: boolean;
+    folder: string;
+    tag: string;
+}
+
 export interface SliceItem {
     name: string;
     path: string;
     children: SliceItem[];
+    auto?: AutoConfig | null;
 }
 
 interface SliceEditorProps {
@@ -19,7 +26,9 @@ interface SliceEditorProps {
     onCancel: () => void;
 }
 
-type PickerTarget = 'main' | number;
+type PickerTarget = 'main' | 'auto' | number;
+
+type AutoEntry = { name: string; path: string };
 
 function autoNameFromPath(picked: string): string {
     let auto = picked.split('\\').pop()?.split('/').pop() || '';
@@ -46,6 +55,12 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
     const [loading, setLoading] = useState(false);
     const inputRef = React.useRef<HTMLInputElement>(null);
 
+    const [autoEnabled, setAutoEnabled] = useState(!!item.auto?.enabled);
+    const [autoFolder, setAutoFolder] = useState(item.auto?.folder ?? item.path ?? '');
+    const [autoTag, setAutoTag] = useState(item.auto?.tag ?? '');
+    const [autoPreview, setAutoPreview] = useState<AutoEntry[]>([]);
+    const [autoPreviewError, setAutoPreviewError] = useState<string | null>(null);
+
     const [childrenList, setChildrenList] = useState<SliceItem[]>(() => {
         const initialChildren = [...(item.children || [])];
         while (initialChildren.length < 8) {
@@ -55,12 +70,34 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
     });
 
     const [showChildren, setShowChildren] = useState(() =>
-        (item.children || []).some(c => c.name.trim() || c.path.trim())
+        !item.auto?.enabled && (item.children || []).some(c => c.name.trim() || c.path.trim())
     );
+
+    const refreshAutoPreview = React.useCallback(async (folder: string, tag: string) => {
+        const f = folder.trim();
+        if (!f) {
+            setAutoPreview([]);
+            setAutoPreviewError(null);
+            return;
+        }
+        try {
+            const entries = await invoke<AutoEntry[]>('list_auto_entries', { folder: f, tag });
+            setAutoPreview(entries);
+            setAutoPreviewError(null);
+        } catch (e) {
+            setAutoPreview([]);
+            setAutoPreviewError(String(e));
+        }
+    }, []);
 
     React.useEffect(() => {
         inputRef.current?.focus({ preventScroll: true });
     }, []);
+
+    React.useEffect(() => {
+        if (!autoEnabled || !allowChildren) return;
+        void refreshAutoPreview(autoFolder, autoTag);
+    }, [autoEnabled, autoFolder, autoTag, allowChildren, refreshAutoPreview]);
 
     React.useEffect(() => {
         if (pickerMenu === null) return;
@@ -81,6 +118,10 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
         if (target === 'main') {
             setPath(picked);
             if (auto) setName(auto);
+            return;
+        }
+        if (target === 'auto') {
+            setAutoFolder(picked);
             return;
         }
         const newChildren = [...childrenList];
@@ -168,16 +209,20 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
     const handleClear = () => {
         setName('');
         setPath('');
+        setAutoEnabled(false);
+        setAutoFolder('');
+        setAutoTag('');
+        setAutoPreview([]);
         if (allowChildren) {
             setChildrenList(Array.from({ length: 8 }, () => ({ name: '', path: '', children: [] })));
             setShowChildren(false);
         }
     };
 
-    const handleSave = () => {
-        const finalChildren = !allowChildren
+    const handleSave = async () => {
+        let finalChildren: SliceItem[] = !allowChildren
             ? (item.children || [])
-            : showChildren
+            : showChildren && !autoEnabled
                 ? childrenList.map(c => ({
                     ...c,
                     name: c.name.trim(),
@@ -185,16 +230,42 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
                 }))
                 : [];
 
+        const autoConfig: AutoConfig | null = allowChildren && autoEnabled
+            ? {
+                enabled: true,
+                folder: autoFolder.trim() || path.trim(),
+                tag: autoTag.trim(),
+            }
+            : null;
+
+        if (autoConfig?.enabled) {
+            try {
+                finalChildren = await invoke<AutoEntry[]>('list_auto_entries', {
+                    folder: autoConfig.folder,
+                    tag: autoConfig.tag,
+                }).then(entries => entries.map(e => ({
+                    name: e.name,
+                    path: e.path,
+                    children: [] as SliceItem[],
+                })));
+            } catch (e) {
+                console.error('[SliceEditor] auto sync failed:', e);
+                alert(`Auto sync failed: ${e}`);
+                return;
+            }
+        }
+
         onSave({
             ...item,
             name: name.trim(),
             path: path.trim(),
             children: finalChildren,
+            auto: autoConfig,
         });
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') handleSave();
+        if (e.key === 'Enter') void handleSave();
         if (e.key === 'Escape') onCancel();
         e.stopPropagation();
     };
@@ -295,7 +366,80 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
                     />
                 </div>
 
-                {allowChildren && !showChildren && (
+                {allowChildren && (
+                    <div className="slice-editor-section slice-editor-auto-section">
+                        <div className="slice-editor-auto-header">
+                            <label className="slice-editor-label">Auto (folder sync)</label>
+                            <label className="toggle-switch slice-editor-auto-toggle">
+                                <input
+                                    type="checkbox"
+                                    checked={autoEnabled}
+                                    onChange={e => {
+                                        setAutoEnabled(e.target.checked);
+                                        if (e.target.checked) setShowChildren(false);
+                                    }}
+                                />
+                                <span className="slider round" />
+                            </label>
+                        </div>
+                        {autoEnabled && (
+                            <>
+                                <label className="slice-editor-label">Source folder</label>
+                                <div className="slice-editor-path-row">
+                                    <input
+                                        className="slice-editor-input"
+                                        type="text"
+                                        value={autoFolder}
+                                        onChange={e => setAutoFolder(e.target.value)}
+                                        placeholder="Folder to scan"
+                                    />
+                                    <div className="slice-editor-browse-wrap">
+                                        <button
+                                            className="slice-editor-browse"
+                                            onClick={e => {
+                                                e.stopPropagation();
+                                                setPickerMenu(pickerMenu === 'auto' ? null : 'auto');
+                                            }}
+                                            disabled={loading}
+                                            title="Pick folder"
+                                        >
+                                            <FolderOpen size={16} />
+                                        </button>
+                                        {pickerMenu === 'auto' && renderPickerMenu('auto')}
+                                    </div>
+                                </div>
+                                <label className="slice-editor-label">Filename tag (optional)</label>
+                                <input
+                                    className="slice-editor-input"
+                                    type="text"
+                                    value={autoTag}
+                                    onChange={e => setAutoTag(e.target.value)}
+                                    placeholder="Only files whose name contains this"
+                                />
+                                <div className="slice-editor-auto-preview">
+                                    {autoPreviewError ? (
+                                        <span className="slice-editor-auto-preview-error">{autoPreviewError}</span>
+                                    ) : (
+                                        <>
+                                            <span className="slice-editor-auto-preview-count">
+                                                {autoPreview.length} file{autoPreview.length === 1 ? '' : 's'}
+                                                {autoPreview.length > 8 ? ' · spiral when >8' : ''}
+                                            </span>
+                                            {autoPreview.slice(0, 5).map((entry, i) => (
+                                                <span key={i} className="slice-editor-auto-preview-item">{entry.name}</span>
+                                            ))}
+                                            {autoPreview.length > 5 && (
+                                                <span className="slice-editor-auto-preview-more">+{autoPreview.length - 5} more</span>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
+
+                {allowChildren && !autoEnabled && !showChildren && (
                     <button
                         type="button"
                         className="slice-editor-add-group"
@@ -305,7 +449,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
                     </button>
                 )}
 
-                {allowChildren && showChildren && (
+                {allowChildren && !autoEnabled && showChildren && (
                     <div className="slice-editor-section slice-editor-group-children">
                         <label className="slice-editor-label">{groupChildrenLabel}</label>
                         <div className="slice-editor-children-list">
@@ -383,7 +527,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
             </div>
 
             <div className="slice-editor-actions">
-                <button className="slice-editor-save" onClick={handleSave}>Save</button>
+                <button className="slice-editor-save" onClick={() => void handleSave()}>Save</button>
                 <button className="slice-editor-clear" onClick={handleClear}>Clear</button>
                 <button className="slice-editor-cancel" onClick={onCancel}>Cancel</button>
             </div>

@@ -80,7 +80,9 @@ pub fn run() {
             commands::update_shortcut,
             commands::open_preferences_window,
             commands::close_preferences_window,
-            commands::empty_all_slices
+            commands::empty_all_slices,
+            commands::list_auto_entries,
+            commands::sync_auto_items
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

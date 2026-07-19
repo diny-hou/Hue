@@ -123,12 +123,137 @@ impl Default for AppearanceConfig {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Default, PartialEq)]
+pub struct AutoConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub folder: String,
+    #[serde(default)]
+    pub tag: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct MenuItem {
     pub name: String,
     pub path: String,
     #[serde(default)]
     pub children: Vec<MenuItem>,
+    #[serde(default)]
+    pub auto: Option<AutoConfig>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct AutoEntry {
+    pub name: String,
+    pub path: String,
+}
+
+const AUTO_ENTRY_CAP: usize = 256;
+
+pub fn auto_enabled(item: &MenuItem) -> bool {
+    item.auto.as_ref().is_some_and(|a| a.enabled)
+}
+
+pub fn auto_folder(item: &MenuItem) -> &str {
+    item.auto
+        .as_ref()
+        .filter(|a| a.enabled)
+        .map(|a| a.folder.as_str())
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or(item.path.as_str())
+}
+
+pub fn auto_tag(item: &MenuItem) -> &str {
+    item.auto.as_ref().map(|a| a.tag.as_str()).unwrap_or("")
+}
+
+pub fn list_auto_entries(folder: &str, tag: &str) -> Result<Vec<AutoEntry>, String> {
+    let dir = std::path::Path::new(folder.trim());
+    if !dir.is_dir() {
+        return Err(format!("Not a folder: {}", folder));
+    }
+
+    let tag_lower = tag.trim().to_lowercase();
+    let mut entries: Vec<AutoEntry> = Vec::new();
+
+    let read_dir = fs::read_dir(dir).map_err(|e| format!("Failed to read folder: {e}"))?;
+    for entry in read_dir {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {e}"))?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let file_name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+        if file_name.starts_with('.') {
+            continue;
+        }
+        if !tag_lower.is_empty() && !file_name.to_lowercase().contains(&tag_lower) {
+            continue;
+        }
+        let display = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(file_name)
+            .to_string();
+        entries.push(AutoEntry {
+            name: display,
+            path: path.to_string_lossy().into_owned(),
+        });
+        if entries.len() >= AUTO_ENTRY_CAP {
+            break;
+        }
+    }
+
+    entries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(entries)
+}
+
+fn sync_item_children(item: &mut MenuItem) -> bool {
+    let mut changed = false;
+    if auto_enabled(item) {
+        let folder = auto_folder(item).to_string();
+        let tag = auto_tag(item).to_string();
+        match list_auto_entries(&folder, &tag) {
+            Ok(entries) => {
+                let new_children: Vec<MenuItem> = entries
+                    .into_iter()
+                    .map(|e| MenuItem {
+                        name: e.name,
+                        path: e.path,
+                        children: vec![],
+                        auto: None,
+                    })
+                    .collect();
+                if item.children != new_children {
+                    item.children = new_children;
+                    changed = true;
+                }
+            }
+            Err(err) => {
+                eprintln!("[Hue auto] sync failed for {}: {err}", folder);
+            }
+        }
+    }
+    for child in item.children.iter_mut() {
+        if sync_item_children(child) {
+            changed = true;
+        }
+    }
+    changed
+}
+
+pub fn sync_auto_items(config: &mut MenuConfig) -> bool {
+    let mut changed = false;
+    for item in config.items.iter_mut() {
+        if sync_item_children(item) {
+            changed = true;
+        }
+    }
+    changed
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -158,53 +283,64 @@ impl Default for MenuConfig {
                             name: "PowerShell".into(),
                             path: "powershell.exe".into(),
                             children: vec![],
+                            auto: None,
                         },
                         MenuItem {
                             name: "CMD".into(),
                             path: "cmd.exe".into(),
                             children: vec![],
+                            auto: None,
                         },
                         MenuItem {
                             name: "WSL".into(),
                             path: "wsl.exe".into(),
                             children: vec![],
+                            auto: None,
                         },
                     ],
+                    auto: None,
                 },
                 MenuItem {
                     name: "Browser".into(),
                     path: "chrome.exe".into(),
                     children: vec![],
+                    auto: None,
                 },
                 MenuItem {
                     name: "Explorer".into(),
                     path: "explorer.exe".into(),
                     children: vec![],
+                    auto: None,
                 },
                 MenuItem {
                     name: "Notepad".into(),
                     path: "notepad.exe".into(),
                     children: vec![],
+                    auto: None,
                 },
                 MenuItem {
                     name: "Settings".into(),
                     path: "ms-settings:".into(),
                     children: vec![],
+                    auto: None,
                 },
                 MenuItem {
                     name: "TaskMgr".into(),
                     path: "taskmgr.exe".into(),
                     children: vec![],
+                    auto: None,
                 },
                 MenuItem {
                     name: "Calc".into(),
                     path: "calc.exe".into(),
                     children: vec![],
+                    auto: None,
                 },
                 MenuItem {
                     name: "Paint".into(),
                     path: "mspaint.exe".into(),
                     children: vec![],
+                    auto: None,
                 },
             ],
         }
