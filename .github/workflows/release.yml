@@ -40,12 +40,13 @@ jobs:
         shell: pwsh
         env:
           SIGNING_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           if (-not $env:SIGNING_KEY_B64) {
             throw "Missing secret TAURI_SIGNING_PRIVATE_KEY"
           }
-          $key = $env:SIGNING_KEY_B64.Trim().TrimStart([char]0xFEFF)
+          # Normalize: secrets sometimes pick up trailing newlines from `gh secret set`
+          $key = ($env:SIGNING_KEY_B64.Trim().TrimStart([char]0xFEFF) -replace '[\r\n]+', '')
           $keyPath = Join-Path $env:RUNNER_TEMP "updater_signing.key"
           $utf8 = New-Object System.Text.UTF8Encoding $false
           [System.IO.File]::WriteAllText($keyPath, $key, $utf8)
@@ -58,7 +59,14 @@ jobs:
           # signer sign allows only one of key string or key path
           $env:TAURI_SIGNING_PRIVATE_KEY_PATH = $keyPath
           Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY -ErrorAction SilentlyContinue
+          Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY_PASSWORD -ErrorAction SilentlyContinue
           Remove-Item Env:\SIGNING_KEY_B64 -ErrorAction SilentlyContinue
+
+          $password = if ($env:SIGNING_KEY_PASSWORD) { $env:SIGNING_KEY_PASSWORD.Trim() } else { "" }
+          Remove-Item Env:\SIGNING_KEY_PASSWORD -ErrorAction SilentlyContinue
+          if ($password) {
+            $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = $password
+          }
 
           node $tauriCli signer sign --private-key-path $keyPath $setup.FullName
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
