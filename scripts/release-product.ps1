@@ -100,7 +100,7 @@ $manifest = [ordered]@{
 )
 
 if (-not $SkipCommit) {
-    git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock src
+    git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/src src .cursor/rules
     git status --short
     $pending = git status --porcelain
     if ($pending) {
