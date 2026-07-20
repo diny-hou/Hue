@@ -10,6 +10,7 @@ import {
 } from '../lib/markingTrail';
 import { resolveGestureThresholds, resolveRingGeometry } from '../lib/ringGeometry';
 import { clampSliceCount, resizeParentItems } from '../lib/sliceCounts';
+import type { WorkspaceChangedPayload } from '../lib/workspace';
 
 export interface AppearanceConfig {
     panel_opacity: number;
@@ -270,6 +271,8 @@ export const PieMenu: React.FC = () => {
     const [isVisible, setIsVisible] = useState(false);
     const [prefsOpen, setPrefsOpen] = useState(false);
     const [previewTab, setPreviewTab] = useState<AppearancePreviewPayload['previewTab']>(null);
+    const [workspaceToast, setWorkspaceToast] = useState<string | null>(null);
+    const workspaceToastTimerRef = React.useRef<number | null>(null);
     const demoSavedRef = React.useRef<{ main: number | null; child: number | null; grand: number | null } | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const isDraggingRef = React.useRef(false);
@@ -472,13 +475,28 @@ export const PieMenu: React.FC = () => {
                     };
                 });
             });
-            return [l1, l2, l3, l4, l5, l6, l7, l8];
+            const l9 = await listen<WorkspaceChangedPayload>('workspace-changed', (event) => {
+                const msg = event.payload?.message?.trim();
+                if (!msg) return;
+                if (workspaceToastTimerRef.current !== null) {
+                    window.clearTimeout(workspaceToastTimerRef.current);
+                }
+                setWorkspaceToast(msg);
+                workspaceToastTimerRef.current = window.setTimeout(() => {
+                    setWorkspaceToast(null);
+                    workspaceToastTimerRef.current = null;
+                }, 2200);
+            });
+            return [l1, l2, l3, l4, l5, l6, l7, l8, l9];
         })();
 
         return () => {
             if (unlistenDrag) unlistenDrag();
             if (unlistenFile) unlistenFile();
             unlistenVisibility.then(listeners => listeners.forEach(un => un()));
+            if (workspaceToastTimerRef.current !== null) {
+                window.clearTimeout(workspaceToastTimerRef.current);
+            }
         };
     }, []);
 
@@ -1820,20 +1838,35 @@ export const PieMenu: React.FC = () => {
                 );
             })}
 
-            {/* Center label */}
+            {/* Center label — right-click: Preferences · middle-click: cycle workspace */}
             <div
                 className="center-hole"
+                onPointerDown={e => {
+                    if (e.button !== 1) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (isDraggingRef.current || isPreferencesOpenRef.current) return;
+                    void invoke('cycle_workspace').catch((err) => {
+                        console.error('[Hue] cycle_workspace failed:', err);
+                        setWorkspaceToast(String(err));
+                    });
+                }}
                 onContextMenu={e => {
                     e.preventDefault();
                     e.stopPropagation();
                     isPreferencesOpenRef.current = true;
                     invoke('open_preferences_window').catch(console.error);
                 }}
-                title="Right-click for Preferences"
+                title="Right-click: Preferences · Middle-click: switch workspace"
             >
                 {(configFull?.appearance?.center_label ?? 'HUE').trim() && (
                     <div className="center-text">
                         {configFull?.appearance?.center_label?.trim() || 'HUE'}
+                    </div>
+                )}
+                {workspaceToast && (
+                    <div className="workspace-toast" role="status">
+                        {workspaceToast}
                     </div>
                 )}
             </div>

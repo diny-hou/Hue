@@ -670,6 +670,27 @@ body {
   z-index: 2;
 }
 
+.workspace-toast {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 10px);
+  transform: translateX(-50%);
+  max-width: 220px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(20, 22, 28, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f2f4f8;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: center;
+  white-space: normal;
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
 .center-text {
   font-size: 14px;
   font-weight: bold;
@@ -1074,11 +1095,35 @@ body {
   flex-shrink: 0;
 }
 
+.preferences-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
 .preferences-header-text {
   display: flex;
   align-items: baseline;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
+  min-width: 0;
+}
+
+.preferences-header-update {
+  flex-shrink: 0;
+  cursor: default;
+}
+
+.pref-update-btn--header {
+  padding: 6px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.pref-update-status--header {
+  text-align: center;
   width: 100%;
 }
 
@@ -1784,6 +1829,108 @@ body {
 
 .pref-update-status.success {
   color: #8fd4a0;
+}
+
+.pref-workspace-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.pref-workspace-btn {
+  flex: 1 1 auto;
+  min-width: 88px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e8ecf4;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.pref-workspace-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.pref-workspace-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.pref-workspace-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.pref-workspace-item {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.pref-workspace-item.active {
+  border-color: rgba(99, 102, 241, 0.55);
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.pref-workspace-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pref-workspace-item-main:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.pref-workspace-item-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pref-workspace-item-path {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pref-workspace-item-remove {
+  width: 32px;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: rgba(255, 180, 180, 0.85);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.pref-workspace-item-remove:hover:not(:disabled) {
+  background: rgba(255, 80, 80, 0.15);
 }
 
 /* Gesture path debug — unrotated overlay (pie-svg is rotate(-90deg)) */

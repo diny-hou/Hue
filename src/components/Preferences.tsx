@@ -29,6 +29,7 @@ import {
     clampSliceCount,
     resizeParentItems,
 } from '../lib/sliceCounts';
+import type { WorkspaceStatus } from '../lib/workspace';
 import {
     HOVER_ANIMATION_OPTIONS,
     HOVER_SCALE_OPTIONS,
@@ -320,6 +321,106 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     const updater = useAppUpdater();
     const previewReadyRef = useRef(false);
     const replayAnimRef = useRef(false);
+    const [workspace, setWorkspace] = useState<WorkspaceStatus | null>(null);
+    const [workspaceBusy, setWorkspaceBusy] = useState(false);
+    const [workspaceMessage, setWorkspaceMessage] = useState<string | null>(null);
+
+    const refreshWorkspace = () => {
+        void invoke<WorkspaceStatus>('get_workspace_status')
+            .then(setWorkspace)
+            .catch((err) => console.error('Failed to load workspace status:', err));
+    };
+
+    useEffect(() => {
+        refreshWorkspace();
+        let unlisten: (() => void) | undefined;
+        void getCurrentWindow()
+            .listen<{ message?: string; status?: WorkspaceStatus }>('workspace-changed', (event) => {
+                if (event.payload?.status) setWorkspace(event.payload.status);
+                if (event.payload?.message) setWorkspaceMessage(event.payload.message);
+            })
+            .then((fn) => { unlisten = fn; });
+        return () => { unlisten?.(); };
+    }, []);
+
+    const withWorkspaceDialog = async (fn: () => Promise<void>) => {
+        setWorkspaceBusy(true);
+        setWorkspaceMessage(null);
+        try {
+            await invoke('set_native_dialog_open', { open: true });
+            await fn();
+        } catch (e) {
+            console.error(e);
+            setWorkspaceMessage(String(e));
+            alert(`Workspace error: ${e}`);
+        } finally {
+            await invoke('set_native_dialog_open', { open: false }).catch(() => {});
+            setWorkspaceBusy(false);
+            refreshWorkspace();
+        }
+    };
+
+    const handleSaveWorkspaceAs = () => withWorkspaceDialog(async () => {
+        await persistConfig();
+        const path = await invoke<string | null>('pick_save_workspace');
+        if (!path) return;
+        const status = await invoke<WorkspaceStatus>('save_workspace_to_path', { path, name: null });
+        setWorkspace(status);
+        setWorkspaceMessage(`Saved “${status.active_name ?? 'workspace'}”`);
+    });
+
+    const handleSaveWorkspace = () => withWorkspaceDialog(async () => {
+        await persistConfig();
+        if (workspace?.active_path) {
+            const status = await invoke<WorkspaceStatus>('save_workspace_to_path', {
+                path: workspace.active_path,
+                name: workspace.active_name,
+            });
+            setWorkspace(status);
+            setWorkspaceMessage(`Saved “${status.active_name ?? 'workspace'}”`);
+            return;
+        }
+        const path = await invoke<string | null>('pick_save_workspace');
+        if (!path) return;
+        const status = await invoke<WorkspaceStatus>('save_workspace_to_path', { path, name: null });
+        setWorkspace(status);
+        setWorkspaceMessage(`Saved “${status.active_name ?? 'workspace'}”`);
+    });
+
+    const handleLoadWorkspace = () => withWorkspaceDialog(async () => {
+        const path = await invoke<string | null>('pick_workspace_file');
+        if (!path) return;
+        const status = await invoke<WorkspaceStatus>('load_workspace_from_path', { path });
+        setWorkspace(status);
+        setWorkspaceMessage(`Loaded “${status.active_name ?? 'workspace'}”`);
+    });
+
+    const handleSwitchWorkspace = async (index: number) => {
+        setWorkspaceBusy(true);
+        setWorkspaceMessage(null);
+        try {
+            const status = await invoke<WorkspaceStatus>('switch_workspace', { index });
+            setWorkspace(status);
+            setWorkspaceMessage(`Loaded “${status.active_name ?? 'workspace'}”`);
+        } catch (e) {
+            console.error(e);
+            alert(`Workspace error: ${e}`);
+        } finally {
+            setWorkspaceBusy(false);
+        }
+    };
+
+    const handleRemoveWorkspace = async (path: string) => {
+        if (!window.confirm('Remove this workspace from the switch list? The .hue file is not deleted.')) {
+            return;
+        }
+        try {
+            const status = await invoke<WorkspaceStatus>('remove_workspace_entry', { path });
+            setWorkspace(status);
+        } catch (e) {
+            alert(`Workspace error: ${e}`);
+        }
+    };
 
     const previewRingGeometry = useMemo(
         () =>
@@ -506,38 +607,42 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         return () => window.removeEventListener('keydown', handleKeyDown, true);
     }, [isRecording]);
 
+    const persistConfig = async (): Promise<boolean> => {
+        if (!shortcut) return false;
+        // Always re-register with the OS. Preferences stays mounted while hidden, so
+        // comparing against the initial config prop can skip the real hotkey update.
+        await invoke('update_shortcut', { newShortcut: shortcut });
+
+        const currentConfig = await invoke<MenuConfig>('get_config');
+        const appearance = buildAppearance();
+        const parentN = clampSliceCount(appearance.parent_slice_count);
+        const childN = clampSliceCount(appearance.child_slice_count);
+        const grandN = clampSliceCount(appearance.grand_slice_count);
+        let nextItems = autoDirty ? menuItems : currentConfig.items;
+        nextItems = resizeParentItems(nextItems, parentN);
+        nextItems = applyChildGrandSlotLimits(nextItems, childN, grandN);
+
+        const newConfig: MenuConfig = {
+            ...currentConfig,
+            global_shortcut: shortcut,
+            appearance,
+            items: nextItems,
+        };
+        await invoke('update_config', { newConfig });
+        setMenuItems(cloneItems(nextItems));
+        if (autoDirty) {
+            const synced = await invoke<MenuConfig>('sync_auto_items').catch(() => null);
+            if (synced) setMenuItems(cloneItems(synced.items));
+            setAutoDirty(false);
+        }
+        return true;
+    };
+
     const handleSave = async () => {
         if (!shortcut) return;
         setSaving(true);
         try {
-            // Always re-register with the OS. Preferences stays mounted while hidden, so
-            // comparing against the initial config prop can skip the real hotkey update.
-            await invoke('update_shortcut', { newShortcut: shortcut });
-
-            // Fetch the CURRENT config from disk to preserve unrelated fields
-            const currentConfig = await invoke<MenuConfig>('get_config');
-            const appearance = buildAppearance();
-            const parentN = clampSliceCount(appearance.parent_slice_count);
-            const childN = clampSliceCount(appearance.child_slice_count);
-            const grandN = clampSliceCount(appearance.grand_slice_count);
-            let nextItems = autoDirty ? menuItems : currentConfig.items;
-            nextItems = resizeParentItems(nextItems, parentN);
-            nextItems = applyChildGrandSlotLimits(nextItems, childN, grandN);
-
-            const newConfig: MenuConfig = {
-                ...currentConfig,
-                global_shortcut: shortcut,
-                appearance,
-                items: nextItems,
-            };
-            await invoke('update_config', { newConfig });
-            setMenuItems(cloneItems(nextItems));
-            if (autoDirty) {
-                const synced = await invoke<MenuConfig>('sync_auto_items').catch(() => null);
-                if (synced) setMenuItems(cloneItems(synced.items));
-                setAutoDirty(false);
-            }
-
+            await persistConfig();
             onSaved();
         } catch (e) {
             console.error('Failed to update config:', e);
@@ -681,10 +786,34 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                     }
                 }}
             >
-                <div className="preferences-header-text">
-                    <span>Hue Preferences</span>
-                    <span className="preferences-version">v{appVersion}</span>
+                <div className="preferences-header-bar">
+                    <div className="preferences-header-text">
+                        <span>Hue Preferences</span>
+                        <span className="preferences-version">v{appVersion}</span>
+                    </div>
+                    <div
+                        className="preferences-header-update"
+                        onPointerDown={(e) => e.stopPropagation()}
+                    >
+                        <button
+                            type="button"
+                            className="pref-update-btn pref-update-btn--header"
+                            onClick={() => void updater.runUpdate()}
+                            disabled={updater.isBusy}
+                        >
+                            {updater.phase === 'checking'
+                                ? 'Checking…'
+                                : updater.isBusy
+                                    ? 'Updating…'
+                                    : 'Check for updates'}
+                        </button>
+                    </div>
                 </div>
+                {updater.statusMessage && (
+                    <p className={`pref-update-status pref-update-status--header${updater.phase === 'uptodate' ? ' success' : ''}`}>
+                        {updater.statusMessage}
+                    </p>
+                )}
                 <p className="preferences-marking-hint">
                     Drag on the pie to test marking gestures — preview only, nothing launches.
                 </p>
@@ -789,6 +918,82 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         </div>
                         <PrefTabReset onReset={() => applyDefaults(SLICE_COUNT_DEFAULT_KEYS)} />
                         <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
+                            <label style={{ fontSize: '14px', fontWeight: 600 }}>Workspace</label>
+                        </div>
+                        <div className="pref-row">
+                            <small style={{ color: '#aaa' }}>
+                                A workspace is a full snapshot (theme, colors, menu paths, Auto folders, hotkey).
+                                Saved as a <code>.hue</code> JSON file. Middle-click the pie center to cycle.
+                            </small>
+                        </div>
+                        <div className="pref-row">
+                            <label>Active</label>
+                            <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.85)' }}>
+                                {workspace?.active_name?.trim() || '— none —'}
+                            </span>
+                        </div>
+                        <div className="pref-workspace-actions">
+                            <button
+                                type="button"
+                                className="pref-workspace-btn"
+                                onClick={() => void handleSaveWorkspace()}
+                                disabled={workspaceBusy || saving}
+                            >
+                                Save
+                            </button>
+                            <button
+                                type="button"
+                                className="pref-workspace-btn"
+                                onClick={() => void handleSaveWorkspaceAs()}
+                                disabled={workspaceBusy || saving}
+                            >
+                                Save As…
+                            </button>
+                            <button
+                                type="button"
+                                className="pref-workspace-btn"
+                                onClick={() => void handleLoadWorkspace()}
+                                disabled={workspaceBusy || saving}
+                            >
+                                Load…
+                            </button>
+                        </div>
+                        {workspaceMessage && (
+                            <div className="pref-row" style={{ marginTop: '6px' }}>
+                                <small style={{ color: '#8fd4a0' }}>{workspaceMessage}</small>
+                            </div>
+                        )}
+                        {(workspace?.entries?.length ?? 0) > 0 && (
+                            <div className="pref-workspace-list">
+                                {workspace!.entries.map((entry, index) => (
+                                    <div
+                                        key={`${entry.path}-${index}`}
+                                        className={`pref-workspace-item${index === workspace!.active_index ? ' active' : ''}`}
+                                    >
+                                        <button
+                                            type="button"
+                                            className="pref-workspace-item-main"
+                                            onClick={() => void handleSwitchWorkspace(index)}
+                                            disabled={workspaceBusy || saving}
+                                            title={entry.path}
+                                        >
+                                            <span className="pref-workspace-item-name">{entry.name}</span>
+                                            <span className="pref-workspace-item-path">{entry.path}</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="pref-workspace-item-remove"
+                                            onClick={() => void handleRemoveWorkspace(entry.path)}
+                                            disabled={workspaceBusy || saving}
+                                            title="Remove from list"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
                             <label>Run on System Startup</label>
                             <label className="toggle-switch">
                                 <input
@@ -798,28 +1003,6 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 />
                                 <span className="slider round"></span>
                             </label>
-                        </div>
-                        <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
-                            <label>Software Update</label>
-                            <div className="pref-update-actions">
-                                <button
-                                    type="button"
-                                    className="pref-update-btn"
-                                    onClick={() => void updater.runUpdate()}
-                                    disabled={updater.isBusy}
-                                >
-                                    {updater.phase === 'checking'
-                                        ? 'Checking…'
-                                        : updater.isBusy
-                                            ? 'Updating…'
-                                            : 'Check for updates'}
-                                </button>
-                                {updater.statusMessage && (
-                                    <p className={`pref-update-status${updater.phase === 'uptodate' ? ' success' : ''}`}>
-                                        {updater.statusMessage}
-                                    </p>
-                                )}
-                            </div>
                         </div>
                         <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
                             <label style={{ color: '#ff6b6b' }}>Danger Zone</label>

@@ -1,4 +1,6 @@
 use crate::menu_logic::{self, AutoEntry, MenuConfig};
+use crate::workspace::{self, WorkspaceStatus};
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use serde::Deserialize;
@@ -365,4 +367,73 @@ pub fn update_shortcut(app_handle: tauri::AppHandle, new_shortcut: String) -> Re
     menu_logic::save_config(&app_handle, &config);
 
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_workspace_status(app_handle: tauri::AppHandle) -> WorkspaceStatus {
+    workspace::status_from_registry(&workspace::load_registry(&app_handle))
+}
+
+#[tauri::command]
+pub async fn pick_save_workspace(app_handle: tauri::AppHandle) -> Option<String> {
+    with_native_dialog_pass_through(&app_handle, || {
+        let file = app_handle
+            .dialog()
+            .file()
+            .add_filter("Hue Workspace", &["hue"])
+            .set_file_name("workspace.hue")
+            .blocking_save_file();
+        file.and_then(|f| f.as_path().map(|p| p.to_string_lossy().into_owned()))
+    })
+}
+
+#[tauri::command]
+pub async fn pick_workspace_file(app_handle: tauri::AppHandle) -> Option<String> {
+    with_native_dialog_pass_through(&app_handle, || {
+        let file = app_handle
+            .dialog()
+            .file()
+            .add_filter("Hue Workspace", &["hue", "json", "txt"])
+            .add_filter("All Files", &["*"])
+            .blocking_pick_file();
+        file.and_then(|f| f.as_path().map(|p| p.to_string_lossy().into_owned()))
+    })
+}
+
+#[tauri::command]
+pub fn save_workspace_to_path(
+    app_handle: tauri::AppHandle,
+    path: String,
+    name: Option<String>,
+) -> Result<WorkspaceStatus, String> {
+    workspace::save_current_to_path(&app_handle, &PathBuf::from(path), name)
+}
+
+#[tauri::command]
+pub fn load_workspace_from_path(
+    app_handle: tauri::AppHandle,
+    path: String,
+) -> Result<WorkspaceStatus, String> {
+    workspace::load_from_path(&app_handle, &PathBuf::from(path))
+}
+
+#[tauri::command]
+pub fn cycle_workspace(app_handle: tauri::AppHandle) -> Result<WorkspaceStatus, String> {
+    workspace::cycle_workspace(&app_handle)
+}
+
+#[tauri::command]
+pub fn switch_workspace(
+    app_handle: tauri::AppHandle,
+    index: usize,
+) -> Result<WorkspaceStatus, String> {
+    workspace::switch_to_index(&app_handle, index)
+}
+
+#[tauri::command]
+pub fn remove_workspace_entry(
+    app_handle: tauri::AppHandle,
+    path: String,
+) -> Result<WorkspaceStatus, String> {
+    workspace::remove_entry(&app_handle, &path)
 }

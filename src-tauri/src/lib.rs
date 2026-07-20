@@ -2,6 +2,7 @@ use tauri::Manager;
 
 mod commands;
 mod menu_logic;
+mod workspace;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -86,6 +87,14 @@ pub fn run() {
             commands::empty_all_slices,
             commands::list_auto_entries,
             commands::sync_auto_items,
+            commands::get_workspace_status,
+            commands::pick_save_workspace,
+            commands::pick_workspace_file,
+            commands::save_workspace_to_path,
+            commands::load_workspace_from_path,
+            commands::cycle_workspace,
+            commands::switch_workspace,
+            commands::remove_workspace_entry,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
