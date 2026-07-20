@@ -30,19 +30,36 @@ pub struct AppearanceConfig {
     /// Record rich gesture samples (zones / child-switch events) for tuning thresholds.
     #[serde(default)]
     pub gesture_path_capture: bool,
-    /// Below this radius (pie px), child may switch by angle. At/above: child freezes.
+    /// Overall radial scale for parent+child+grand bands (1.0 = default span).
+    #[serde(default = "default_ring_span_scale")]
+    pub ring_span_scale: f32,
+    #[serde(default = "default_parent_ring_weight")]
+    pub parent_ring_weight: f32,
+    #[serde(default = "default_child_ring_weight")]
+    pub child_ring_weight: f32,
+    #[serde(default = "default_grand_ring_weight")]
+    pub grand_ring_weight: f32,
+    /// 0–1 position across child ring: inner switch vs outer path→grand (0.5 = half split).
+    #[serde(default = "default_gesture_child_split_ratio")]
+    pub gesture_child_split_ratio: f32,
+    /// When parent has a path: where child picking starts, as fraction of parent ring depth.
+    #[serde(default = "default_gesture_path_pick_ratio")]
+    pub gesture_path_pick_ratio: f32,
+    /// Retrace child on entry corridor, fraction of parent ring depth from center hole.
+    #[serde(default = "default_gesture_retrace_child_ratio")]
+    pub gesture_retrace_child_ratio: f32,
+    /// Hybrid grand debug ring: extra fraction beyond child outer, relative to child ring depth.
+    #[serde(default = "default_gesture_grand_hybrid_extra_ratio")]
+    pub gesture_grand_hybrid_extra_ratio: f32,
+    /// Legacy px thresholds (still loaded from old configs; ignored when ratios are used).
     #[serde(default = "default_gesture_child_switch_max")]
     pub gesture_child_switch_max: f32,
-    /// Enter grandchild selection at/above this radius (folder child).
     #[serde(default = "default_gesture_grand_enter")]
     pub gesture_grand_enter: f32,
-    /// Enter grandchild selection for hybrid child (has path + children).
     #[serde(default = "default_gesture_grand_enter_hybrid")]
     pub gesture_grand_enter_hybrid: f32,
-    /// On entry sector only: drop grand when distance falls below this.
     #[serde(default = "default_gesture_retrace_grand")]
     pub gesture_retrace_grand: f32,
-    /// On entry sector only: drop child when distance falls below this.
     #[serde(default = "default_gesture_retrace_child")]
     pub gesture_retrace_child: f32,
     #[serde(default = "default_prefs_bg")]
@@ -63,7 +80,7 @@ pub struct AppearanceConfig {
     pub panel_overlay: String,
     #[serde(default = "default_panel_overlay_opacity")]
     pub panel_overlay_opacity: f32,
-    /// Radial depth of the parent ring (px), outer = 70 + this value.
+    /// Legacy px ring depths (migrated to weights in the UI layer).
     #[serde(default = "default_parent_ring_thickness")]
     pub parent_ring_thickness: f32,
     #[serde(default = "default_child_ring_thickness")]
@@ -121,6 +138,38 @@ fn default_gesture_retrace_child() -> f32 {
     140.0
 }
 
+fn default_ring_span_scale() -> f32 {
+    1.0
+}
+
+fn default_parent_ring_weight() -> f32 {
+    110.0
+}
+
+fn default_child_ring_weight() -> f32 {
+    120.0
+}
+
+fn default_grand_ring_weight() -> f32 {
+    120.0
+}
+
+fn default_gesture_child_split_ratio() -> f32 {
+    0.5
+}
+
+fn default_gesture_path_pick_ratio() -> f32 {
+    0.636
+}
+
+fn default_gesture_retrace_child_ratio() -> f32 {
+    0.636
+}
+
+fn default_gesture_grand_hybrid_extra_ratio() -> f32 {
+    0.167
+}
+
 fn default_prefs_bg() -> String {
     "#252830".to_string()
 }
@@ -175,6 +224,14 @@ impl Default for AppearanceConfig {
             sub_panel_text_color: default_text_color(),
             gesture_path_debug: false,
             gesture_path_capture: false,
+            ring_span_scale: default_ring_span_scale(),
+            parent_ring_weight: default_parent_ring_weight(),
+            child_ring_weight: default_child_ring_weight(),
+            grand_ring_weight: default_grand_ring_weight(),
+            gesture_child_split_ratio: default_gesture_child_split_ratio(),
+            gesture_path_pick_ratio: default_gesture_path_pick_ratio(),
+            gesture_retrace_child_ratio: default_gesture_retrace_child_ratio(),
+            gesture_grand_hybrid_extra_ratio: default_gesture_grand_hybrid_extra_ratio(),
             gesture_child_switch_max: default_gesture_child_switch_max(),
             gesture_grand_enter: default_gesture_grand_enter(),
             gesture_grand_enter_hybrid: default_gesture_grand_enter_hybrid(),

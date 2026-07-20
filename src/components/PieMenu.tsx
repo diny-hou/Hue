@@ -3,7 +3,7 @@ import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { SliceEditor, SliceItem } from './SliceEditor';
 import type { AppearancePreviewPayload } from '../lib/appearanceDefaults';
-import { resolveRingGeometry } from '../lib/ringGeometry';
+import { resolveGestureThresholds, resolveRingGeometry } from '../lib/ringGeometry';
 
 export interface AppearanceConfig {
     panel_opacity: number;
@@ -21,14 +21,24 @@ export interface AppearanceConfig {
     sub_panel_text_color?: string;
     gesture_path_debug?: boolean;
     gesture_path_capture?: boolean;
-    /** Below: child may switch by angle. At/above: child freezes (skim-safe). */
+    ring_span_scale?: number;
+    parent_ring_weight?: number;
+    child_ring_weight?: number;
+    grand_ring_weight?: number;
+    gesture_child_split_ratio?: number;
+    gesture_path_pick_ratio?: number;
+    gesture_retrace_child_ratio?: number;
+    gesture_grand_hybrid_extra_ratio?: number;
+    /** @deprecated legacy px — migrated to ratios */
     gesture_child_switch_max?: number;
     gesture_grand_enter?: number;
     gesture_grand_enter_hybrid?: number;
-    /** On entry sector only — drop grand below this radius. */
     gesture_retrace_grand?: number;
-    /** On entry sector only — drop child below this radius. */
     gesture_retrace_child?: number;
+    /** @deprecated legacy px thickness */
+    parent_ring_thickness?: number;
+    child_ring_thickness?: number;
+    grand_ring_thickness?: number;
     prefs_bg?: string;
     prefs_accent?: string;
     prefs_text?: string;
@@ -37,9 +47,6 @@ export interface AppearanceConfig {
     center_logo?: string;
     panel_overlay?: string;
     panel_overlay_opacity?: number;
-    parent_ring_thickness?: number;
-    child_ring_thickness?: number;
-    grand_ring_thickness?: number;
 }
 
 type GestureZone = 'dead' | 'parent' | 'switch' | 'freeze' | 'grand' | 'retrace';
@@ -59,24 +66,6 @@ type CaptureSample = {
 };
 
 /** Child ring geometry — path split uses the radial midpoint by default. */
-function resolveGestureThresholds(appearance?: AppearanceConfig | null) {
-    const rings = resolveRingGeometry(appearance);
-    return {
-        /** Inner half of child ring: child may switch. Outer half+: path / grand. */
-        childSwitchMax: (() => {
-            const v = appearance?.gesture_child_switch_max;
-            // Previous default was 250; treat as child-mid so path corridor starts at half
-            if (v === undefined || v === 250) return rings.childMidRadius;
-            return v;
-        })(),
-        grandEnter: appearance?.gesture_grand_enter ?? rings.childOuterRadius,
-        grandEnterHybrid: appearance?.gesture_grand_enter_hybrid ?? rings.childOuterRadius + 20,
-        retraceGrand: appearance?.gesture_retrace_grand ?? rings.childInnerRadius,
-        retraceChild: appearance?.gesture_retrace_child ?? 140,
-        rings,
-    };
-}
-
 function classifyZone(
     distance: number,
     childPickMin: number,
@@ -945,7 +934,7 @@ export const PieMenu: React.FC = () => {
 
         const lockedMain = lockedMainRef.current;
         const mainHasPath = lockedMain !== null ? !!items[lockedMain]?.path : false;
-        const childPickMin = mainHasPath ? 140 : 70;
+        const childPickMin = th.childPickMin(mainHasPath);
 
         // ── Level 1: switch zone vs freeze zone; retrace only on entry sector ──
         if (lockLevelRef.current === 1 && lockedMain !== null) {
@@ -1581,7 +1570,7 @@ export const PieMenu: React.FC = () => {
                         {[
                             { r: th.retraceChild, label: `retrace child ${th.retraceChild}`, cls: 'retrace' },
                             { r: th.retraceGrand, label: `retrace grand ${th.retraceGrand}`, cls: 'retrace' },
-                            { r: th.childSwitchMax, label: `half split ${th.childSwitchMax}`, cls: 'commit' },
+                            { r: th.childSwitchMax, label: `half split ${Math.round(th.childSplitRatio * 100)}%`, cls: 'commit' },
                             { r: th.grandEnter, label: `grand ${th.grandEnter}`, cls: 'grand' },
                             { r: th.grandEnterHybrid, label: `hybrid ${th.grandEnterHybrid}`, cls: 'grand' },
                         ].map(({ r, label, cls }) => (
@@ -1835,7 +1824,7 @@ export const PieMenu: React.FC = () => {
                     <div>main {debugHud.main ?? '—'} · child {debugHud.child ?? '—'} · grand {debugHud.grand ?? '—'}</div>
                     <div className="gesture-debug-hud-hint">
                         child {debugHud.childSwitchable ? 'SWITCH (inner half)' : 'PATH→grand (outer half)'}
-                        {' · '}split@{th.childSwitchMax}
+                        {' · '}split@{Math.round(th.childSplitRatio * 100)}%
                         {gestureCapture ? ' · capture→console/localStorage' : ''}
                         {debugHud.autoN !== undefined ? ` · auto ${debugHud.autoN} turn ${debugHud.spiralTurn ?? 0}` : ''}
                     </div>

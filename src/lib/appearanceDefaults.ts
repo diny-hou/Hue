@@ -16,11 +16,14 @@ export const DEFAULT_APPEARANCE: AppearanceConfig = {
     sub_panel_text_color: '#ffffff',
     gesture_path_debug: false,
     gesture_path_capture: false,
-    gesture_child_switch_max: 240,
-    gesture_grand_enter: 300,
-    gesture_grand_enter_hybrid: 320,
-    gesture_retrace_grand: 180,
-    gesture_retrace_child: 140,
+    ring_span_scale: 1.0,
+    parent_ring_weight: 110,
+    child_ring_weight: 120,
+    grand_ring_weight: 120,
+    gesture_child_split_ratio: 0.5,
+    gesture_path_pick_ratio: 0.636,
+    gesture_retrace_child_ratio: 0.636,
+    gesture_grand_hybrid_extra_ratio: 0.167,
     prefs_bg: '#252830',
     prefs_accent: '#6366f1',
     prefs_text: '#ffffff',
@@ -29,9 +32,6 @@ export const DEFAULT_APPEARANCE: AppearanceConfig = {
     center_logo: '',
     panel_overlay: '',
     panel_overlay_opacity: 0.18,
-    parent_ring_thickness: 110,
-    child_ring_thickness: 120,
-    grand_ring_thickness: 120,
 };
 
 export type AppearancePreviewPayload = AppearanceConfig & {
@@ -53,9 +53,14 @@ export const THEME_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [
     'center_logo',
     'panel_overlay',
     'panel_overlay_opacity',
-    'parent_ring_thickness',
-    'child_ring_thickness',
-    'grand_ring_thickness',
+    'ring_span_scale',
+    'parent_ring_weight',
+    'child_ring_weight',
+    'grand_ring_weight',
+    'gesture_child_split_ratio',
+    'gesture_path_pick_ratio',
+    'gesture_retrace_child_ratio',
+    'gesture_grand_hybrid_extra_ratio',
 ];
 
 export const OPACITY_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [
@@ -75,11 +80,6 @@ export const ANIMATION_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [
 export const ADVANCED_GESTURE_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [
     'gesture_path_debug',
     'gesture_path_capture',
-    'gesture_child_switch_max',
-    'gesture_grand_enter',
-    'gesture_grand_enter_hybrid',
-    'gesture_retrace_grand',
-    'gesture_retrace_child',
 ];
 
 export function pickAppearanceDefaults(keys: (keyof AppearanceConfig)[]): Partial<AppearanceConfig> {

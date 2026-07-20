@@ -18,6 +18,7 @@ import {
     pickAppearanceDefaults,
     type AppearancePreviewPayload,
 } from '../lib/appearanceDefaults';
+import { ringWeightPercents, resolveRingGeometry } from '../lib/ringGeometry';
 import {
     HOVER_ANIMATION_OPTIONS,
     HOVER_SCALE_OPTIONS,
@@ -262,16 +263,16 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     const [hoverAnim, setHoverAnim] = useState(config.appearance?.hover_animation || 'none');
     const [gesturePathDebug, setGesturePathDebug] = useState(!!config.appearance?.gesture_path_debug);
     const [gesturePathCapture, setGesturePathCapture] = useState(!!config.appearance?.gesture_path_capture);
-    const [childSwitchMax, setChildSwitchMax] = useState(
-        // 240 = midpoint of child ring (180–300); migrate previous default 250 → mid
-        (config.appearance?.gesture_child_switch_max === 250
-            ? 240
-            : config.appearance?.gesture_child_switch_max) ?? 240,
+    const [ringSpanScale, setRingSpanScale] = useState(config.appearance?.ring_span_scale ?? DEFAULT_APPEARANCE.ring_span_scale!);
+    const [parentRingWeight, setParentRingWeight] = useState(config.appearance?.parent_ring_weight ?? DEFAULT_APPEARANCE.parent_ring_weight!);
+    const [childRingWeight, setChildRingWeight] = useState(config.appearance?.child_ring_weight ?? DEFAULT_APPEARANCE.child_ring_weight!);
+    const [grandRingWeight, setGrandRingWeight] = useState(config.appearance?.grand_ring_weight ?? DEFAULT_APPEARANCE.grand_ring_weight!);
+    const [childSplitRatio, setChildSplitRatio] = useState(config.appearance?.gesture_child_split_ratio ?? DEFAULT_APPEARANCE.gesture_child_split_ratio!);
+    const [pathPickRatio, setPathPickRatio] = useState(config.appearance?.gesture_path_pick_ratio ?? DEFAULT_APPEARANCE.gesture_path_pick_ratio!);
+    const [retraceChildRatio, setRetraceChildRatio] = useState(config.appearance?.gesture_retrace_child_ratio ?? DEFAULT_APPEARANCE.gesture_retrace_child_ratio!);
+    const [grandHybridExtraRatio, setGrandHybridExtraRatio] = useState(
+        config.appearance?.gesture_grand_hybrid_extra_ratio ?? DEFAULT_APPEARANCE.gesture_grand_hybrid_extra_ratio!,
     );
-    const [grandEnter, setGrandEnter] = useState(config.appearance?.gesture_grand_enter ?? 300);
-    const [grandEnterHybrid, setGrandEnterHybrid] = useState(config.appearance?.gesture_grand_enter_hybrid ?? 320);
-    const [retraceGrand, setRetraceGrand] = useState(config.appearance?.gesture_retrace_grand ?? 180);
-    const [retraceChild, setRetraceChild] = useState(config.appearance?.gesture_retrace_child ?? 140);
     const [prefsBg, setPrefsBg] = useState(config.appearance?.prefs_bg ?? DEFAULT_APPEARANCE.prefs_bg!);
     const [prefsAccent, setPrefsAccent] = useState(config.appearance?.prefs_accent ?? DEFAULT_APPEARANCE.prefs_accent!);
     const [prefsText, setPrefsText] = useState(config.appearance?.prefs_text ?? DEFAULT_APPEARANCE.prefs_text!);
@@ -281,15 +282,6 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     const [panelOverlay, setPanelOverlay] = useState(config.appearance?.panel_overlay ?? '');
     const [panelOverlayOpacity, setPanelOverlayOpacity] = useState(
         config.appearance?.panel_overlay_opacity ?? DEFAULT_APPEARANCE.panel_overlay_opacity!,
-    );
-    const [parentRingThickness, setParentRingThickness] = useState(
-        config.appearance?.parent_ring_thickness ?? DEFAULT_APPEARANCE.parent_ring_thickness!,
-    );
-    const [childRingThickness, setChildRingThickness] = useState(
-        config.appearance?.child_ring_thickness ?? DEFAULT_APPEARANCE.child_ring_thickness!,
-    );
-    const [grandRingThickness, setGrandRingThickness] = useState(
-        config.appearance?.grand_ring_thickness ?? DEFAULT_APPEARANCE.grand_ring_thickness!,
     );
     const [imageBusy, setImageBusy] = useState(false);
 
@@ -302,6 +294,18 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     const updater = useAppUpdater();
     const previewReadyRef = useRef(false);
     const replayAnimRef = useRef(false);
+
+    const previewRingGeometry = useMemo(
+        () =>
+            resolveRingGeometry({
+                ring_span_scale: ringSpanScale,
+                parent_ring_weight: parentRingWeight,
+                child_ring_weight: childRingWeight,
+                grand_ring_weight: grandRingWeight,
+            } as AppearanceConfig),
+        [ringSpanScale, parentRingWeight, childRingWeight, grandRingWeight],
+    );
+    const ringPercents = useMemo(() => ringWeightPercents(previewRingGeometry), [previewRingGeometry]);
 
     const buildAppearance = (): AppearanceConfig => ({
         panel_opacity: opacity,
@@ -319,11 +323,14 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         hover_animation: hoverAnim,
         gesture_path_debug: gesturePathDebug,
         gesture_path_capture: gesturePathCapture,
-        gesture_child_switch_max: childSwitchMax,
-        gesture_grand_enter: grandEnter,
-        gesture_grand_enter_hybrid: grandEnterHybrid,
-        gesture_retrace_grand: retraceGrand,
-        gesture_retrace_child: retraceChild,
+        ring_span_scale: ringSpanScale,
+        parent_ring_weight: parentRingWeight,
+        child_ring_weight: childRingWeight,
+        grand_ring_weight: grandRingWeight,
+        gesture_child_split_ratio: childSplitRatio,
+        gesture_path_pick_ratio: pathPickRatio,
+        gesture_retrace_child_ratio: retraceChildRatio,
+        gesture_grand_hybrid_extra_ratio: grandHybridExtraRatio,
         prefs_bg: prefsBg,
         prefs_accent: prefsAccent,
         prefs_text: prefsText,
@@ -332,9 +339,6 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         center_logo: centerLogo,
         panel_overlay: panelOverlay,
         panel_overlay_opacity: panelOverlayOpacity,
-        parent_ring_thickness: parentRingThickness,
-        child_ring_thickness: childRingThickness,
-        grand_ring_thickness: grandRingThickness,
     });
 
     const emitPreview = (extra?: Partial<AppearancePreviewPayload>) => {
@@ -365,11 +369,14 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         if (d.hover_animation !== undefined) setHoverAnim(d.hover_animation);
         if (d.gesture_path_debug !== undefined) setGesturePathDebug(d.gesture_path_debug);
         if (d.gesture_path_capture !== undefined) setGesturePathCapture(d.gesture_path_capture);
-        if (d.gesture_child_switch_max !== undefined) setChildSwitchMax(d.gesture_child_switch_max);
-        if (d.gesture_grand_enter !== undefined) setGrandEnter(d.gesture_grand_enter);
-        if (d.gesture_grand_enter_hybrid !== undefined) setGrandEnterHybrid(d.gesture_grand_enter_hybrid);
-        if (d.gesture_retrace_grand !== undefined) setRetraceGrand(d.gesture_retrace_grand);
-        if (d.gesture_retrace_child !== undefined) setRetraceChild(d.gesture_retrace_child);
+        if (d.ring_span_scale !== undefined) setRingSpanScale(d.ring_span_scale);
+        if (d.parent_ring_weight !== undefined) setParentRingWeight(d.parent_ring_weight);
+        if (d.child_ring_weight !== undefined) setChildRingWeight(d.child_ring_weight);
+        if (d.grand_ring_weight !== undefined) setGrandRingWeight(d.grand_ring_weight);
+        if (d.gesture_child_split_ratio !== undefined) setChildSplitRatio(d.gesture_child_split_ratio);
+        if (d.gesture_path_pick_ratio !== undefined) setPathPickRatio(d.gesture_path_pick_ratio);
+        if (d.gesture_retrace_child_ratio !== undefined) setRetraceChildRatio(d.gesture_retrace_child_ratio);
+        if (d.gesture_grand_hybrid_extra_ratio !== undefined) setGrandHybridExtraRatio(d.gesture_grand_hybrid_extra_ratio);
         if (d.prefs_bg !== undefined) setPrefsBg(d.prefs_bg);
         if (d.prefs_accent !== undefined) setPrefsAccent(d.prefs_accent);
         if (d.prefs_text !== undefined) setPrefsText(d.prefs_text);
@@ -378,9 +385,6 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         if (d.center_logo !== undefined) setCenterLogo(d.center_logo);
         if (d.panel_overlay !== undefined) setPanelOverlay(d.panel_overlay);
         if (d.panel_overlay_opacity !== undefined) setPanelOverlayOpacity(d.panel_overlay_opacity);
-        if (d.parent_ring_thickness !== undefined) setParentRingThickness(d.parent_ring_thickness);
-        if (d.child_ring_thickness !== undefined) setChildRingThickness(d.child_ring_thickness);
-        if (d.grand_ring_thickness !== undefined) setGrandRingThickness(d.grand_ring_thickness);
         window.setTimeout(() => emitPreview(extra), 0);
     };
 
@@ -435,10 +439,10 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         panelColor, textSize, textColor, subPanelTextSize, subPanelTextColor,
         animType, hoverScale, hoverAnim,
         gesturePathDebug, gesturePathCapture,
-        childSwitchMax, grandEnter, grandEnterHybrid, retraceGrand, retraceChild,
+        ringSpanScale, parentRingWeight, childRingWeight, grandRingWeight,
+        childSplitRatio, pathPickRatio, retraceChildRatio, grandHybridExtraRatio,
         prefsBg, prefsAccent, prefsText, prefsChrome,
         centerLabel, centerLogo, panelOverlay, panelOverlayOpacity,
-        parentRingThickness, childRingThickness, grandRingThickness,
         activeTab,
     ]);
 
@@ -782,7 +786,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         <div className="pref-tab-toolbar">
                             <span className="pref-tab-toolbar-title">Pie &amp; text</span>
                             <PrefTabReset onReset={() => applyDefaults(THEME_DEFAULT_KEYS.filter(k =>
-                                !['prefs_bg', 'prefs_accent', 'prefs_text', 'prefs_chrome', 'center_label', 'center_logo', 'panel_overlay', 'panel_overlay_opacity', 'parent_ring_thickness', 'child_ring_thickness', 'grand_ring_thickness'].includes(k)
+                                !['prefs_bg', 'prefs_accent', 'prefs_text', 'prefs_chrome', 'center_label', 'center_logo', 'panel_overlay', 'panel_overlay_opacity', 'ring_span_scale', 'parent_ring_weight', 'child_ring_weight', 'grand_ring_weight', 'gesture_child_split_ratio', 'gesture_path_pick_ratio', 'gesture_retrace_child_ratio', 'gesture_grand_hybrid_extra_ratio'].includes(k)
                             ))} />
                         </div>
                         <div className="pref-row">
@@ -842,8 +846,32 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         </div>
 
                         <div className="pref-tab-toolbar" style={{ marginTop: '16px' }}>
-                            <span className="pref-tab-toolbar-title">Ring depth (parent / child / grand)</span>
-                            <PrefTabReset onReset={() => applyDefaults(['parent_ring_thickness', 'child_ring_thickness', 'grand_ring_thickness'])} />
+                            <span className="pref-tab-toolbar-title">Ring size &amp; gestures</span>
+                            <PrefTabReset onReset={() => applyDefaults([
+                                'ring_span_scale',
+                                'parent_ring_weight',
+                                'child_ring_weight',
+                                'grand_ring_weight',
+                                'gesture_child_split_ratio',
+                                'gesture_path_pick_ratio',
+                                'gesture_retrace_child_ratio',
+                                'gesture_grand_hybrid_extra_ratio',
+                            ])} />
+                        </div>
+                        <div className="pref-row">
+                            <label>Overall size</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                                <input
+                                    type="range"
+                                    min="70"
+                                    max="130"
+                                    step="1"
+                                    style={{ flex: 1 }}
+                                    value={Math.round(ringSpanScale * 100)}
+                                    onChange={(e) => setRingSpanScale(Number(e.target.value) / 100)}
+                                />
+                                <span className="pref-value-numeric">{Math.round(ringSpanScale * 100)}%</span>
+                            </div>
                         </div>
                         <div className="pref-row">
                             <label>Parent ring</label>
@@ -851,13 +879,13 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 <input
                                     type="range"
                                     min="60"
-                                    max="160"
-                                    step="2"
+                                    max="200"
+                                    step="5"
                                     style={{ flex: 1 }}
-                                    value={parentRingThickness}
-                                    onChange={(e) => setParentRingThickness(Number(e.target.value))}
+                                    value={parentRingWeight}
+                                    onChange={(e) => setParentRingWeight(Number(e.target.value))}
                                 />
-                                <span className="pref-value-numeric">{Math.round(parentRingThickness)}px</span>
+                                <span className="pref-value-numeric">{ringPercents.parent}%</span>
                             </div>
                         </div>
                         <div className="pref-row">
@@ -866,13 +894,13 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 <input
                                     type="range"
                                     min="60"
-                                    max="180"
-                                    step="2"
+                                    max="200"
+                                    step="5"
                                     style={{ flex: 1 }}
-                                    value={childRingThickness}
-                                    onChange={(e) => setChildRingThickness(Number(e.target.value))}
+                                    value={childRingWeight}
+                                    onChange={(e) => setChildRingWeight(Number(e.target.value))}
                                 />
-                                <span className="pref-value-numeric">{Math.round(childRingThickness)}px</span>
+                                <span className="pref-value-numeric">{ringPercents.child}%</span>
                             </div>
                         </div>
                         <div className="pref-row">
@@ -881,16 +909,78 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 <input
                                     type="range"
                                     min="60"
-                                    max="180"
-                                    step="2"
+                                    max="200"
+                                    step="5"
                                     style={{ flex: 1 }}
-                                    value={grandRingThickness}
-                                    onChange={(e) => setGrandRingThickness(Number(e.target.value))}
+                                    value={grandRingWeight}
+                                    onChange={(e) => setGrandRingWeight(Number(e.target.value))}
                                 />
-                                <span className="pref-value-numeric">{Math.round(grandRingThickness)}px</span>
+                                <span className="pref-value-numeric">{ringPercents.grand}%</span>
                             </div>
                         </div>
-                        <small className="pref-hint">Radial thickness of each panel ring. Rings stay connected — changing one shifts the next ring outward.</small>
+                        <div className="pref-row">
+                            <label>Child half split</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                                <input
+                                    type="range"
+                                    min="35"
+                                    max="65"
+                                    step="1"
+                                    style={{ flex: 1 }}
+                                    value={Math.round(childSplitRatio * 100)}
+                                    onChange={(e) => setChildSplitRatio(Number(e.target.value) / 100)}
+                                />
+                                <span className="pref-value-numeric">{Math.round(childSplitRatio * 100)}%</span>
+                            </div>
+                        </div>
+                        <div className="pref-row">
+                            <label>Path pick depth</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                                <input
+                                    type="range"
+                                    min="40"
+                                    max="90"
+                                    step="1"
+                                    style={{ flex: 1 }}
+                                    value={Math.round(pathPickRatio * 100)}
+                                    onChange={(e) => setPathPickRatio(Number(e.target.value) / 100)}
+                                />
+                                <span className="pref-value-numeric">{Math.round(pathPickRatio * 100)}%</span>
+                            </div>
+                        </div>
+                        <div className="pref-row">
+                            <label>Retrace child</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                                <input
+                                    type="range"
+                                    min="40"
+                                    max="90"
+                                    step="1"
+                                    style={{ flex: 1 }}
+                                    value={Math.round(retraceChildRatio * 100)}
+                                    onChange={(e) => setRetraceChildRatio(Number(e.target.value) / 100)}
+                                />
+                                <span className="pref-value-numeric">{Math.round(retraceChildRatio * 100)}%</span>
+                            </div>
+                        </div>
+                        <div className="pref-row">
+                            <label>Grand hybrid extra</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                                <input
+                                    type="range"
+                                    min="5"
+                                    max="35"
+                                    step="1"
+                                    style={{ flex: 1 }}
+                                    value={Math.round(grandHybridExtraRatio * 100)}
+                                    onChange={(e) => setGrandHybridExtraRatio(Number(e.target.value) / 100)}
+                                />
+                                <span className="pref-value-numeric">{Math.round(grandHybridExtraRatio * 100)}%</span>
+                            </div>
+                        </div>
+                        <small className="pref-hint">
+                            Ring depth and gesture hit zones scale together. Percentages are shares of each ring band — half split is within the child ring; path pick and retrace are within the parent ring. Grand enter follows the child outer edge automatically.
+                        </small>
 
                         <div className="pref-tab-toolbar" style={{ marginTop: '16px' }}>
                             <span className="pref-tab-toolbar-title">Center label &amp; logo</span>
@@ -1256,70 +1346,9 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         </div>
 
                         <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
-                            <label style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>Gesture Thresholds</label>
-                        </div>
-                        <div className="pref-row" style={{ marginTop: '4px' }}>
                             <small style={{ color: '#aaa' }}>
-                                Live preview on the pie (rings + labels update as you drag).
-                                Theme, Opacity, and Animations tabs show parent / child / grand rings on the pie live.
-                                Apply to save. Close without Apply discards preview.
-                                Child half split: inner = switch child · outer = path→grand.
+                                Ring size and gesture hit zones are tuned on the Theme tab as percentages. Enable path debug above to see live rings on the pie while dragging.
                             </small>
-                        </div>
-                        <div className="pref-row">
-                            <label>Child Half Split ({childSwitchMax})</label>
-                            <input
-                                type="range"
-                                min={180}
-                                max={300}
-                                step={1}
-                                value={childSwitchMax}
-                                onChange={(e) => setChildSwitchMax(Number(e.target.value))}
-                            />
-                        </div>
-                        <div className="pref-row">
-                            <label>Grand Enter ({grandEnter})</label>
-                            <input
-                                type="range"
-                                min={260}
-                                max={380}
-                                step={1}
-                                value={grandEnter}
-                                onChange={(e) => setGrandEnter(Number(e.target.value))}
-                            />
-                        </div>
-                        <div className="pref-row">
-                            <label>Grand Enter Hybrid ({grandEnterHybrid})</label>
-                            <input
-                                type="range"
-                                min={280}
-                                max={400}
-                                step={1}
-                                value={grandEnterHybrid}
-                                onChange={(e) => setGrandEnterHybrid(Number(e.target.value))}
-                            />
-                        </div>
-                        <div className="pref-row">
-                            <label>Retrace Grand ({retraceGrand})</label>
-                            <input
-                                type="range"
-                                min={100}
-                                max={280}
-                                step={1}
-                                value={retraceGrand}
-                                onChange={(e) => setRetraceGrand(Number(e.target.value))}
-                            />
-                        </div>
-                        <div className="pref-row">
-                            <label>Retrace Child ({retraceChild})</label>
-                            <input
-                                type="range"
-                                min={70}
-                                max={220}
-                                step={1}
-                                value={retraceChild}
-                                onChange={(e) => setRetraceChild(Number(e.target.value))}
-                            />
                         </div>
                     </>
                 )}
