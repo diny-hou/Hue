@@ -213,6 +213,8 @@ pub fn open_preferences_window(app_handle: tauri::AppHandle) {
             // Keep main window visible so user can preview design changes
             let _ = main_window.show();
         }
+        // Hidden webview keeps React state — force a fresh config load each open
+        let _ = window.emit("preferences-reload", ());
         let _ = window.show();
         let _ = window.set_focus();
     }
@@ -300,26 +302,23 @@ pub async fn pick_folder(app_handle: tauri::AppHandle) -> Option<String> {
 
 #[tauri::command]
 pub fn update_shortcut(app_handle: tauri::AppHandle, new_shortcut: String) -> Result<(), String> {
-    use std::str::FromStr;
     use std::sync::Mutex;
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
-    // 1. Get current shortcut string from state
-    let state = app_handle.state::<Mutex<String>>();
-    let current_shortcut_str = state.lock().unwrap().clone();
-
-    // 2. Unregister old shortcut
-    if let Ok(old_shortcut) = Shortcut::from_str(&current_shortcut_str) {
-        let _ = app_handle.global_shortcut().unregister(old_shortcut);
+    let new_shortcut = new_shortcut.trim().to_string();
+    if new_shortcut.is_empty() {
+        return Err("Shortcut cannot be empty.".into());
     }
 
-    // 3. Register new shortcut
-    crate::register_shortcut(&app_handle, &new_shortcut);
+    // Clear every Hue-owned hotkey first so stale OS bindings cannot linger
+    // when the in-memory string no longer matches what was registered.
+    let _ = app_handle.global_shortcut().unregister_all();
 
-    // 4. Update the state with the new shortcut
+    crate::register_shortcut(&app_handle, &new_shortcut)?;
+
+    let state = app_handle.state::<Mutex<String>>();
     *state.lock().unwrap() = new_shortcut.clone();
 
-    // 5. Save the configuration to disk
     let mut config = menu_logic::load_config(&app_handle);
     config.global_shortcut = new_shortcut;
     menu_logic::save_config(&app_handle, &config);

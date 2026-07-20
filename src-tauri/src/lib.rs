@@ -30,7 +30,9 @@ pub fn run() {
             // Store the current shortcut string in state so it can be updated
             app.manage(Mutex::new(config.global_shortcut.clone()));
 
-            register_shortcut(&app_handle, &config.global_shortcut);
+            if let Err(e) = register_shortcut(&app_handle, &config.global_shortcut) {
+                eprintln!("Warning: {e}");
+            }
 
             // Check if started with --minimized (autostart)
             let args: Vec<String> = std::env::args().collect();
@@ -94,21 +96,16 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-pub fn register_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) {
+pub fn register_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) -> Result<(), String> {
     use std::str::FromStr;
     use tauri::Emitter;
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
-    let shortcut = match Shortcut::from_str(shortcut_str) {
-        Ok(s) => s,
-        Err(_) => {
-            eprintln!("Warning: failed to parse shortcut: {}", shortcut_str);
-            return;
-        }
-    };
+    let shortcut = Shortcut::from_str(shortcut_str)
+        .map_err(|e| format!("Invalid shortcut “{shortcut_str}”: {e}"))?;
 
     let handle_clone = app_handle.clone();
-    let result = app_handle
+    app_handle
         .global_shortcut()
         .on_shortcut(shortcut, move |_app, _sc, event| {
             if let Some(window) = handle_clone.get_webview_window("main") {
@@ -133,9 +130,6 @@ pub fn register_shortcut(app_handle: &tauri::AppHandle, shortcut_str: &str) {
                     let _ = window.emit("menu-hide", ());
                 }
             }
-        });
-
-    if let Err(e) = result {
-        eprintln!("Warning: could not register global shortcut: {}", e);
-    }
+        })
+        .map_err(|e| format!("Could not register shortcut “{shortcut_str}”: {e}"))
 }

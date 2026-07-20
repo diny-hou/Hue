@@ -27,6 +27,47 @@ function cloneItems(items: SliceItem[]): SliceItem[] {
     return JSON.parse(JSON.stringify(items)) as SliceItem[];
 }
 
+/** Map a keydown to a global-hotkey token (letters, digits, space, arrows, F-keys). */
+function shortcutKeyFromEvent(e: KeyboardEvent): string | null {
+    const { code, key } = e;
+    if (code === 'Space') return 'space';
+    if (code.startsWith('Key') && code.length === 4) return code.slice(3).toLowerCase();
+    if (code.startsWith('Digit') && code.length === 6) return code.slice(5);
+    if (/^F\d{1,2}$/.test(code)) return code.toLowerCase();
+
+    const byCode: Record<string, string> = {
+        ArrowUp: 'up',
+        ArrowDown: 'down',
+        ArrowLeft: 'left',
+        ArrowRight: 'right',
+        Escape: 'esc',
+        Tab: 'tab',
+        Enter: 'enter',
+        Backspace: 'backspace',
+        Delete: 'delete',
+        Home: 'home',
+        End: 'end',
+        PageUp: 'pageup',
+        PageDown: 'pagedown',
+        Minus: 'minus',
+        Equal: 'equal',
+        BracketLeft: 'bracketleft',
+        BracketRight: 'bracketright',
+        Semicolon: 'semicolon',
+        Quote: 'quote',
+        Backquote: 'backquote',
+        Backslash: 'backslash',
+        Comma: 'comma',
+        Period: 'period',
+        Slash: 'slash',
+    };
+    if (byCode[code]) return byCode[code];
+
+    // Fallback for simple printable keys (never use '+' — it breaks alt+… parsing)
+    if (key.length === 1 && key !== '+') return key.toLowerCase();
+    return null;
+}
+
 function collectAutoEntries(items: SliceItem[]): AutoListEntry[] {
     const out: AutoListEntry[] = [];
     items.forEach((main, mi) => {
@@ -112,17 +153,29 @@ function swapIndices<T>(arr: T[], a: number, b: number): T[] {
 
 export const StandalonePreferences: React.FC = () => {
     const [config, setConfig] = useState<MenuConfig | null>(null);
+    const [configEpoch, setConfigEpoch] = useState(0);
 
     useEffect(() => {
-        console.log("StandalonePreferences mounted, fetching config...");
-        invoke<MenuConfig>('get_config')
-            .then(c => {
-                console.log("Config fetched successfully:", c);
-                setConfig(c);
-            })
-            .catch(err => {
-                console.error("Failed to fetch config:", err);
-            });
+        const load = () => {
+            invoke<MenuConfig>('get_config')
+                .then(c => {
+                    setConfig(c);
+                    setConfigEpoch(n => n + 1);
+                })
+                .catch(err => {
+                    console.error('Failed to fetch config:', err);
+                });
+        };
+
+        load();
+
+        // Webview is hidden (not destroyed) on close — reload when opened again.
+        let unlisten: (() => void) | undefined;
+        void getCurrentWindow()
+            .listen('preferences-reload', () => { load(); })
+            .then(fn => { unlisten = fn; });
+
+        return () => { unlisten?.(); };
     }, []);
 
     if (!config) return (
@@ -141,7 +194,14 @@ export const StandalonePreferences: React.FC = () => {
         }
     };
 
-    return <Preferences config={config} onClose={handleWindowClose} onSaved={handleWindowClose} />;
+    return (
+        <Preferences
+            key={configEpoch}
+            config={config}
+            onClose={handleWindowClose}
+            onSaved={handleWindowClose}
+        />
+    );
 };
 
 interface PreferencesProps {
@@ -284,14 +344,14 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                 return;
             }
 
+            const keyStr = shortcutKeyFromEvent(e);
+            if (!keyStr) return;
+
             const keys: string[] = [];
             if (e.ctrlKey) keys.push('ctrl');
             if (e.shiftKey) keys.push('shift');
             if (e.altKey) keys.push('alt');
             if (e.metaKey) keys.push('super');
-
-            // Handle spacebar explicitly
-            const keyStr = e.code === 'Space' ? 'space' : e.key.toLowerCase();
             keys.push(keyStr);
 
             setShortcut(keys.join('+'));
@@ -306,10 +366,9 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         if (!shortcut) return;
         setSaving(true);
         try {
-            // First update the shortcut separately because it handles OS registration
-            if (shortcut !== config.global_shortcut) {
-                await invoke('update_shortcut', { newShortcut: shortcut });
-            }
+            // Always re-register with the OS. Preferences stays mounted while hidden, so
+            // comparing against the initial config prop can skip the real hotkey update.
+            await invoke('update_shortcut', { newShortcut: shortcut });
 
             // Fetch the CURRENT config from disk to preserve unrelated fields
             const currentConfig = await invoke<MenuConfig>('get_config');
@@ -330,7 +389,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
             onSaved();
         } catch (e) {
             console.error('Failed to update config:', e);
-            alert('Failed to save settings.');
+            alert(`Failed to save settings: ${e}`);
         } finally {
             setSaving(false);
         }
