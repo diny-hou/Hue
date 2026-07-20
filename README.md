@@ -88,4 +88,4 @@ npm run tauri build
 
 ## ライセンス
 
-（未定 — 公開時に LICENSE を追加してください）
+[MIT](LICENSE) — 無料で利用・改変・再配布できます。
