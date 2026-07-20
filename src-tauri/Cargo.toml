@@ -1,6 +1,6 @@
 [package]
 name = "hue"
-version = "0.0.10"
+version = "0.0.11"
 description = "A Tauri App"
 authors = ["diny-hou"]
 license = "MIT"
@@ -27,7 +27,6 @@ tauri-plugin-global-shortcut = "2.3.1"
 tauri-plugin-single-instance = "2.4.0"
 tauri-plugin-dialog = "2.6.0"
 tauri-plugin-process = "2"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"

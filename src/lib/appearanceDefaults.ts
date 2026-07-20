@@ -29,9 +29,6 @@ export const DEFAULT_APPEARANCE: AppearanceConfig = {
     prefs_text: '#ffffff',
     prefs_chrome: 'normal',
     center_label: 'HUE',
-    center_logo: '',
-    panel_overlay: '',
-    panel_overlay_opacity: 0.18,
 };
 
 export type AppearancePreviewPayload = AppearanceConfig & {
@@ -50,9 +47,6 @@ export const THEME_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [
     'prefs_text',
     'prefs_chrome',
     'center_label',
-    'center_logo',
-    'panel_overlay',
-    'panel_overlay_opacity',
     'ring_span_scale',
     'parent_ring_weight',
     'child_ring_weight',

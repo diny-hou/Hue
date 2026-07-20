@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isEnabled, enable, disable } from '@tauri-apps/plugin-autostart';
-import { ArrowDown, ArrowUp, FolderOpen, ImageIcon, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, FolderOpen } from 'lucide-react';
 import { AppearanceConfig, MenuConfig } from './PieMenu';
 import { SliceItem } from './SliceEditor';
 import { UpdateDialog } from './UpdateDialog';
@@ -278,12 +278,6 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     const [prefsText, setPrefsText] = useState(config.appearance?.prefs_text ?? DEFAULT_APPEARANCE.prefs_text!);
     const [prefsChrome, setPrefsChrome] = useState(config.appearance?.prefs_chrome ?? DEFAULT_APPEARANCE.prefs_chrome!);
     const [centerLabel, setCenterLabel] = useState(config.appearance?.center_label ?? DEFAULT_APPEARANCE.center_label!);
-    const [centerLogo, setCenterLogo] = useState(config.appearance?.center_logo ?? '');
-    const [panelOverlay, setPanelOverlay] = useState(config.appearance?.panel_overlay ?? '');
-    const [panelOverlayOpacity, setPanelOverlayOpacity] = useState(
-        config.appearance?.panel_overlay_opacity ?? DEFAULT_APPEARANCE.panel_overlay_opacity!,
-    );
-    const [imageBusy, setImageBusy] = useState(false);
 
     const [isRecording, setIsRecording] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -336,9 +330,6 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         prefs_text: prefsText,
         prefs_chrome: prefsChrome,
         center_label: centerLabel,
-        center_logo: centerLogo,
-        panel_overlay: panelOverlay,
-        panel_overlay_opacity: panelOverlayOpacity,
     });
 
     const emitPreview = (extra?: Partial<AppearancePreviewPayload>) => {
@@ -382,9 +373,6 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         if (d.prefs_text !== undefined) setPrefsText(d.prefs_text);
         if (d.prefs_chrome !== undefined) setPrefsChrome(d.prefs_chrome);
         if (d.center_label !== undefined) setCenterLabel(d.center_label);
-        if (d.center_logo !== undefined) setCenterLogo(d.center_logo);
-        if (d.panel_overlay !== undefined) setPanelOverlay(d.panel_overlay);
-        if (d.panel_overlay_opacity !== undefined) setPanelOverlayOpacity(d.panel_overlay_opacity);
         window.setTimeout(() => emitPreview(extra), 0);
     };
 
@@ -393,34 +381,6 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
             return;
         }
         applyDefaults(Object.keys(DEFAULT_APPEARANCE) as (keyof AppearanceConfig)[], { replayOpenAnimation: true });
-    };
-
-    const importAppearanceImage = async (kind: 'center_logo' | 'panel_overlay') => {
-        setImageBusy(true);
-        try {
-            await invoke('set_native_dialog_open', { open: true });
-            const picked = await invoke<string | null>('pick_file');
-            if (!picked) return;
-            const rel = await invoke<string>('import_appearance_image', { kind, sourcePath: picked });
-            if (kind === 'center_logo') setCenterLogo(rel);
-            else setPanelOverlay(rel);
-        } catch (e) {
-            console.error('[Preferences] import image failed:', e);
-            alert(`Failed to import image: ${e}`);
-        } finally {
-            await invoke('set_native_dialog_open', { open: false }).catch(() => {});
-            setImageBusy(false);
-        }
-    };
-
-    const clearAppearanceImage = async (kind: 'center_logo' | 'panel_overlay') => {
-        try {
-            await invoke('clear_appearance_image', { kind });
-            if (kind === 'center_logo') setCenterLogo('');
-            else setPanelOverlay('');
-        } catch (e) {
-            console.error('[Preferences] clear image failed:', e);
-        }
     };
 
     // Live-preview appearance (esp. threshold rings) on the main pie while Preferences is open
@@ -442,7 +402,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         ringSpanScale, parentRingWeight, childRingWeight, grandRingWeight,
         childSplitRatio, pathPickRatio, retraceChildRatio, grandHybridExtraRatio,
         prefsBg, prefsAccent, prefsText, prefsChrome,
-        centerLabel, centerLogo, panelOverlay, panelOverlayOpacity,
+        centerLabel,
         activeTab,
     ]);
 
@@ -786,7 +746,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         <div className="pref-tab-toolbar">
                             <span className="pref-tab-toolbar-title">Pie &amp; text</span>
                             <PrefTabReset onReset={() => applyDefaults(THEME_DEFAULT_KEYS.filter(k =>
-                                !['prefs_bg', 'prefs_accent', 'prefs_text', 'prefs_chrome', 'center_label', 'center_logo', 'panel_overlay', 'panel_overlay_opacity', 'ring_span_scale', 'parent_ring_weight', 'child_ring_weight', 'grand_ring_weight', 'gesture_child_split_ratio', 'gesture_path_pick_ratio', 'gesture_retrace_child_ratio', 'gesture_grand_hybrid_extra_ratio'].includes(k)
+                                !['prefs_bg', 'prefs_accent', 'prefs_text', 'prefs_chrome', 'center_label', 'ring_span_scale', 'parent_ring_weight', 'child_ring_weight', 'grand_ring_weight', 'gesture_child_split_ratio', 'gesture_path_pick_ratio', 'gesture_retrace_child_ratio', 'gesture_grand_hybrid_extra_ratio'].includes(k)
                             ))} />
                         </div>
                         <div className="pref-row">
@@ -983,7 +943,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         </small>
 
                         <div className="pref-tab-toolbar" style={{ marginTop: '16px' }}>
-                            <span className="pref-tab-toolbar-title">Center label &amp; logo</span>
+                            <span className="pref-tab-toolbar-title">Center label</span>
                         </div>
                         <div className="pref-row">
                             <label>Center label</label>
@@ -995,52 +955,6 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 onChange={(e) => setCenterLabel(e.target.value)}
                                 placeholder="HUE"
                             />
-                        </div>
-                        <div className="pref-row pref-row-wrap">
-                            <label>Center logo</label>
-                            <div className="pref-image-actions">
-                                <button type="button" className="pref-image-btn" disabled={imageBusy} onClick={() => void importAppearanceImage('center_logo')}>
-                                    <ImageIcon size={14} /> Import
-                                </button>
-                                {centerLogo && (
-                                    <button type="button" className="pref-image-btn pref-image-btn-danger" disabled={imageBusy} onClick={() => void clearAppearanceImage('center_logo')}>
-                                        <Trash2 size={14} /> Remove
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                        <small className="pref-hint">PNG/JPEG/WebP → saved once as 256×256 PNG. Logo appears above the label.</small>
-
-                        <div className="pref-tab-toolbar" style={{ marginTop: '16px' }}>
-                            <span className="pref-tab-toolbar-title">Panel overlay</span>
-                        </div>
-                        <div className="pref-row pref-row-wrap">
-                            <label>Overlay image</label>
-                            <div className="pref-image-actions">
-                                <button type="button" className="pref-image-btn" disabled={imageBusy} onClick={() => void importAppearanceImage('panel_overlay')}>
-                                    <ImageIcon size={14} /> Import
-                                </button>
-                                {panelOverlay && (
-                                    <button type="button" className="pref-image-btn pref-image-btn-danger" disabled={imageBusy} onClick={() => void clearAppearanceImage('panel_overlay')}>
-                                        <Trash2 size={14} /> Remove
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                        <div className="pref-row">
-                            <label>Overlay opacity</label>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="0.6"
-                                    step="0.02"
-                                    style={{ flex: 1 }}
-                                    value={panelOverlayOpacity}
-                                    onChange={(e) => setPanelOverlayOpacity(parseFloat(e.target.value))}
-                                />
-                                <span style={{ fontSize: '12px', minWidth: '3ch' }}>{Math.round(panelOverlayOpacity * 100)}%</span>
-                            </div>
                         </div>
 
                         <div className="pref-tab-toolbar" style={{ marginTop: '16px' }}>

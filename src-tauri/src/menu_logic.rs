@@ -73,13 +73,6 @@ pub struct AppearanceConfig {
     pub prefs_chrome: String,
     #[serde(default = "default_center_label")]
     pub center_label: String,
-    /// Relative path under app config dir, e.g. "assets/center-logo.png"
-    #[serde(default)]
-    pub center_logo: String,
-    #[serde(default)]
-    pub panel_overlay: String,
-    #[serde(default = "default_panel_overlay_opacity")]
-    pub panel_overlay_opacity: f32,
     /// Legacy px ring depths (migrated to weights in the UI layer).
     #[serde(default = "default_parent_ring_thickness")]
     pub parent_ring_thickness: f32,
@@ -190,10 +183,6 @@ fn default_center_label() -> String {
     "HUE".to_string()
 }
 
-fn default_panel_overlay_opacity() -> f32 {
-    0.18
-}
-
 fn default_parent_ring_thickness() -> f32 {
     110.0
 }
@@ -242,9 +231,6 @@ impl Default for AppearanceConfig {
             prefs_text: default_prefs_text(),
             prefs_chrome: default_prefs_chrome(),
             center_label: default_center_label(),
-            center_logo: String::new(),
-            panel_overlay: String::new(),
-            panel_overlay_opacity: default_panel_overlay_opacity(),
             parent_ring_thickness: default_parent_ring_thickness(),
             child_ring_thickness: default_child_ring_thickness(),
             grand_ring_thickness: default_grand_ring_thickness(),
@@ -503,31 +489,6 @@ pub fn get_config_path(app_handle: &AppHandle) -> PathBuf {
         .app_config_dir()
         .unwrap_or_default()
         .join("preferences.json")
-}
-
-pub fn get_assets_dir(app_handle: &AppHandle) -> PathBuf {
-    app_handle
-        .path()
-        .app_config_dir()
-        .unwrap_or_default()
-        .join("assets")
-}
-
-pub fn resolve_asset_path(app_handle: &AppHandle, rel: &str) -> Option<PathBuf> {
-    let rel = rel.trim();
-    if rel.is_empty() {
-        return None;
-    }
-    let path = app_handle
-        .path()
-        .app_config_dir()
-        .ok()?
-        .join(rel);
-    if path.is_file() {
-        Some(path)
-    } else {
-        None
-    }
 }
 
 pub fn load_config(app_handle: &AppHandle) -> MenuConfig {

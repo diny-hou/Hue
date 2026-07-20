@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { SliceEditor, SliceItem } from './SliceEditor';
 import type { AppearancePreviewPayload } from '../lib/appearanceDefaults';
@@ -44,9 +44,6 @@ export interface AppearanceConfig {
     prefs_text?: string;
     prefs_chrome?: 'normal' | 'liquid_glass' | string;
     center_label?: string;
-    center_logo?: string;
-    panel_overlay?: string;
-    panel_overlay_opacity?: number;
 }
 
 type GestureZone = 'dead' | 'parent' | 'switch' | 'freeze' | 'grand' | 'retrace';
@@ -262,8 +259,6 @@ export const PieMenu: React.FC = () => {
     const [isVisible, setIsVisible] = useState(false);
     const [prefsOpen, setPrefsOpen] = useState(false);
     const [previewTab, setPreviewTab] = useState<AppearancePreviewPayload['previewTab']>(null);
-    const [centerLogoUrl, setCenterLogoUrl] = useState<string | null>(null);
-    const [panelOverlayUrl, setPanelOverlayUrl] = useState<string | null>(null);
     const demoSavedRef = React.useRef<{ main: number | null; child: number | null; grand: number | null } | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const isDraggingRef = React.useRef(false);
@@ -479,28 +474,6 @@ export const PieMenu: React.FC = () => {
     useEffect(() => {
         configRef.current = items;
     }, [items]);
-
-    useEffect(() => {
-        const rel = configFull?.appearance?.center_logo?.trim();
-        if (!rel) {
-            setCenterLogoUrl(null);
-            return;
-        }
-        invoke<string | null>('resolve_appearance_asset', { relPath: rel })
-            .then(path => setCenterLogoUrl(path ? convertFileSrc(path) : null))
-            .catch(() => setCenterLogoUrl(null));
-    }, [configFull?.appearance?.center_logo]);
-
-    useEffect(() => {
-        const rel = configFull?.appearance?.panel_overlay?.trim();
-        if (!rel) {
-            setPanelOverlayUrl(null);
-            return;
-        }
-        invoke<string | null>('resolve_appearance_asset', { relPath: rel })
-            .then(path => setPanelOverlayUrl(path ? convertFileSrc(path) : null))
-            .catch(() => setPanelOverlayUrl(null));
-    }, [configFull?.appearance?.panel_overlay]);
 
     useEffect(() => {
         if (!isVisible) {
@@ -1403,17 +1376,6 @@ export const PieMenu: React.FC = () => {
             onContextMenu={handleContextMenu}
             style={customStyles}
         >
-            {/* Panel image overlay */}
-            {panelOverlayUrl && (
-                <div
-                    className="pie-panel-overlay"
-                    style={{
-                        opacity: configFull?.appearance?.panel_overlay_opacity ?? 0.18,
-                        backgroundImage: `url("${panelOverlayUrl}")`,
-                    }}
-                />
-            )}
-
             <svg className="pie-svg" viewBox={`0 0 ${size} ${size}`}>
                 <defs>
                     <filter id="glass-blur">
@@ -1797,7 +1759,7 @@ export const PieMenu: React.FC = () => {
                 );
             })}
 
-            {/* Center label / logo */}
+            {/* Center label */}
             <div
                 className="center-hole"
                 onContextMenu={e => {
@@ -1808,9 +1770,6 @@ export const PieMenu: React.FC = () => {
                 }}
                 title="Right-click for Preferences"
             >
-                {centerLogoUrl && (
-                    <img className="center-logo" src={centerLogoUrl} alt="" draggable={false} />
-                )}
                 {(configFull?.appearance?.center_label ?? 'HUE').trim() && (
                     <div className="center-text">
                         {configFull?.appearance?.center_label?.trim() || 'HUE'}

@@ -86,9 +86,6 @@ pub fn run() {
             commands::empty_all_slices,
             commands::list_auto_entries,
             commands::sync_auto_items,
-            commands::import_appearance_image,
-            commands::clear_appearance_image,
-            commands::resolve_appearance_asset,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
