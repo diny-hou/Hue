@@ -168,6 +168,8 @@ pub fn auto_tag(item: &MenuItem) -> &str {
     item.auto.as_ref().map(|a| a.tag.as_str()).unwrap_or("")
 }
 
+/// List files directly inside `folder` (non-recursive). Subdirectories are ignored.
+/// Empty / whitespace `tag` → include every file. Non-empty → filename contains tag (case-insensitive).
 pub fn list_auto_entries(folder: &str, tag: &str) -> Result<Vec<AutoEntry>, String> {
     let dir = std::path::Path::new(folder.trim());
     if !dir.is_dir() {
@@ -175,12 +177,14 @@ pub fn list_auto_entries(folder: &str, tag: &str) -> Result<Vec<AutoEntry>, Stri
     }
 
     let tag_lower = tag.trim().to_lowercase();
+    let filter_by_tag = !tag_lower.is_empty();
     let mut entries: Vec<AutoEntry> = Vec::new();
 
     let read_dir = fs::read_dir(dir).map_err(|e| format!("Failed to read folder: {e}"))?;
     for entry in read_dir {
         let entry = entry.map_err(|e| format!("Failed to read entry: {e}"))?;
         let path = entry.path();
+        // Non-recursive: files only at this level
         if !path.is_file() {
             continue;
         }
@@ -191,7 +195,7 @@ pub fn list_auto_entries(folder: &str, tag: &str) -> Result<Vec<AutoEntry>, Stri
         if file_name.starts_with('.') {
             continue;
         }
-        if !tag_lower.is_empty() && !file_name.to_lowercase().contains(&tag_lower) {
+        if filter_by_tag && !file_name.to_lowercase().contains(&tag_lower) {
             continue;
         }
         let display = path

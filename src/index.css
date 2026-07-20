@@ -351,6 +351,111 @@ body {
   color: #ff8a8a;
 }
 
+.slice-editor-auto-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.pref-auto-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.pref-auto-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(165, 180, 252, 0.95);
+  margin-top: 8px;
+}
+
+.pref-auto-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pref-auto-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pref-auto-depth {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(165, 180, 252, 0.9);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.pref-auto-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pref-auto-path-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pref-auto-path-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.pref-auto-reorder {
+  display: flex;
+  gap: 4px;
+}
+
+.pref-auto-reorder button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pref-auto-reorder button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.pref-auto-reorder button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.pref-auto-empty {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 12px;
+}
+
 /* Override text styles for outer ring labels */
 .slice-content.outer-label {
   font-size: var(--sub-text-size, 12px);

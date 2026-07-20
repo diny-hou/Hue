@@ -1,12 +1,114 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { getName, getTauriVersion, getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isEnabled, enable, disable } from '@tauri-apps/plugin-autostart';
+import { ArrowDown, ArrowUp, FolderOpen } from 'lucide-react';
 import { AppearanceConfig, MenuConfig } from './PieMenu';
+import { SliceItem } from './SliceEditor';
 import { UpdateDialog } from './UpdateDialog';
 import { useAppUpdater } from '../hooks/useAppUpdater';
+
+type AutoDepth = 'parent' | 'child' | 'grand';
+
+type AutoListEntry = {
+    depth: AutoDepth;
+    mainIndex: number;
+    childIndex: number | null;
+    grandIndex: number | null;
+    name: string;
+    folder: string;
+    tag: string;
+    context?: string;
+};
+
+function cloneItems(items: SliceItem[]): SliceItem[] {
+    return JSON.parse(JSON.stringify(items)) as SliceItem[];
+}
+
+function collectAutoEntries(items: SliceItem[]): AutoListEntry[] {
+    const out: AutoListEntry[] = [];
+    items.forEach((main, mi) => {
+        if (main.auto?.enabled) {
+            out.push({
+                depth: 'parent',
+                mainIndex: mi,
+                childIndex: null,
+                grandIndex: null,
+                name: main.name.trim() || `Parent ${mi + 1}`,
+                folder: main.auto.folder?.trim() || main.path || '',
+                tag: main.auto.tag ?? '',
+            });
+        }
+        (main.children || []).forEach((child, ci) => {
+            if (child.auto?.enabled) {
+                out.push({
+                    depth: 'child',
+                    mainIndex: mi,
+                    childIndex: ci,
+                    grandIndex: null,
+                    name: child.name.trim() || `Child ${ci + 1}`,
+                    folder: child.auto.folder?.trim() || child.path || '',
+                    tag: child.auto.tag ?? '',
+                    context: main.name.trim() || `Parent ${mi + 1}`,
+                });
+            }
+            (child.children || []).forEach((grand, gi) => {
+                if (grand.auto?.enabled) {
+                    out.push({
+                        depth: 'grand',
+                        mainIndex: mi,
+                        childIndex: ci,
+                        grandIndex: gi,
+                        name: grand.name.trim() || `Grand ${gi + 1}`,
+                        folder: grand.auto.folder?.trim() || grand.path || '',
+                        tag: grand.auto.tag ?? '',
+                        context: `${main.name.trim() || `Parent ${mi + 1}`} › ${child.name.trim() || `Child ${ci + 1}`}`,
+                    });
+                }
+            });
+        });
+    });
+    return out;
+}
+
+function getAutoItem(items: SliceItem[], entry: AutoListEntry): SliceItem | null {
+    const main = items[entry.mainIndex];
+    if (!main) return null;
+    if (entry.grandIndex !== null && entry.childIndex !== null) {
+        return main.children?.[entry.childIndex]?.children?.[entry.grandIndex] ?? null;
+    }
+    if (entry.childIndex !== null) {
+        return main.children?.[entry.childIndex] ?? null;
+    }
+    return main;
+}
+
+function patchAutoItem(
+    items: SliceItem[],
+    entry: AutoListEntry,
+    patch: { folder?: string; tag?: string },
+): SliceItem[] {
+    const next = cloneItems(items);
+    const item = getAutoItem(next, entry);
+    if (!item) return items;
+    item.auto = {
+        enabled: true,
+        folder: patch.folder ?? item.auto?.folder ?? '',
+        tag: patch.tag ?? item.auto?.tag ?? '',
+    };
+    return next;
+}
+
+function swapIndices<T>(arr: T[], a: number, b: number): T[] {
+    if (a < 0 || b < 0 || a >= arr.length || b >= arr.length || a === b) return arr;
+    const copy = [...arr];
+    const tmp = copy[a];
+    copy[a] = copy[b];
+    copy[b] = tmp;
+    return copy;
+}
 
 export const StandalonePreferences: React.FC = () => {
     const [config, setConfig] = useState<MenuConfig | null>(null);
@@ -49,8 +151,16 @@ interface PreferencesProps {
 }
 
 export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSaved }) => {
-    const [activeTab, setActiveTab] = useState<'general' | 'theme' | 'opacity' | 'animations' | 'advanced'>('general');
+    const [activeTab, setActiveTab] = useState<'general' | 'theme' | 'opacity' | 'animations' | 'auto' | 'advanced'>('general');
     const [shortcut, setShortcut] = useState(config.global_shortcut || 'alt+space');
+    const [menuItems, setMenuItems] = useState<SliceItem[]>(() => cloneItems(config.items || []));
+    const [autoDirty, setAutoDirty] = useState(false);
+    const [autoBrowseBusy, setAutoBrowseBusy] = useState(false);
+
+    const setMenuItemsDirty = (updater: React.SetStateAction<SliceItem[]>) => {
+        setAutoDirty(true);
+        setMenuItems(updater);
+    };
 
     // Appearance state
     const [opacity, setOpacity] = useState(config.appearance?.panel_opacity ?? 0.8);
@@ -201,17 +311,21 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                 await invoke('update_shortcut', { newShortcut: shortcut });
             }
 
-            // Fetch the CURRENT config from disk to preserve items
-            // (they may have been modified by other commands like empty_all_slices)
+            // Fetch the CURRENT config from disk to preserve unrelated fields
             const currentConfig = await invoke<MenuConfig>('get_config');
 
-            // Only update appearance and shortcut, keep items from disk
             const newConfig: MenuConfig = {
                 ...currentConfig,
                 global_shortcut: shortcut,
                 appearance: buildAppearance(),
+                items: autoDirty ? menuItems : currentConfig.items,
             };
             await invoke('update_config', { newConfig });
+            if (autoDirty) {
+                const synced = await invoke<MenuConfig>('sync_auto_items').catch(() => null);
+                if (synced) setMenuItems(cloneItems(synced.items));
+                setAutoDirty(false);
+            }
 
             onSaved();
         } catch (e) {
@@ -221,6 +335,105 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
             setSaving(false);
         }
     };
+
+    const autoEntries = useMemo(() => collectAutoEntries(menuItems), [menuItems]);
+
+    const pickAutoFolder = async (entry: AutoListEntry) => {
+        setAutoBrowseBusy(true);
+        try {
+            await invoke('set_native_dialog_open', { open: true });
+            const picked = await invoke<string | null>('pick_folder');
+            if (picked) {
+                setMenuItemsDirty(prev => patchAutoItem(prev, entry, { folder: picked }));
+            }
+        } finally {
+            await invoke('set_native_dialog_open', { open: false }).catch(() => {});
+            setAutoBrowseBusy(false);
+        }
+    };
+
+    const moveAutoEntry = (entry: AutoListEntry, direction: -1 | 1) => {
+        setMenuItemsDirty(prev => {
+            if (entry.depth === 'parent') {
+                const parentIdxs = collectAutoEntries(prev)
+                    .filter(e => e.depth === 'parent')
+                    .map(e => e.mainIndex);
+                const pos = parentIdxs.indexOf(entry.mainIndex);
+                const other = parentIdxs[pos + direction];
+                if (other === undefined) return prev;
+                return swapIndices(prev, entry.mainIndex, other);
+            }
+            if (entry.depth === 'child' && entry.childIndex !== null) {
+                const siblingIdxs = collectAutoEntries(prev)
+                    .filter(e => e.depth === 'child' && e.mainIndex === entry.mainIndex)
+                    .map(e => e.childIndex!)
+                    .sort((a, b) => a - b);
+                const pos = siblingIdxs.indexOf(entry.childIndex);
+                const other = siblingIdxs[pos + direction];
+                if (other === undefined) return prev;
+                const next = cloneItems(prev);
+                const kids = next[entry.mainIndex]?.children;
+                if (!kids) return prev;
+                next[entry.mainIndex].children = swapIndices(kids, entry.childIndex, other);
+                return next;
+            }
+            if (entry.depth === 'grand' && entry.childIndex !== null && entry.grandIndex !== null) {
+                const siblingIdxs = collectAutoEntries(prev)
+                    .filter(e =>
+                        e.depth === 'grand'
+                        && e.mainIndex === entry.mainIndex
+                        && e.childIndex === entry.childIndex
+                    )
+                    .map(e => e.grandIndex!)
+                    .sort((a, b) => a - b);
+                const pos = siblingIdxs.indexOf(entry.grandIndex);
+                const other = siblingIdxs[pos + direction];
+                if (other === undefined) return prev;
+                const next = cloneItems(prev);
+                const grands = next[entry.mainIndex]?.children?.[entry.childIndex]?.children;
+                if (!grands) return prev;
+                next[entry.mainIndex].children![entry.childIndex].children = swapIndices(
+                    grands,
+                    entry.grandIndex,
+                    other,
+                );
+                return next;
+            }
+            return prev;
+        });
+    };
+
+    const canMoveAuto = (entry: AutoListEntry, direction: -1 | 1): boolean => {
+        if (entry.depth === 'parent') {
+            const parentIdxs = autoEntries.filter(e => e.depth === 'parent').map(e => e.mainIndex);
+            const pos = parentIdxs.indexOf(entry.mainIndex);
+            return parentIdxs[pos + direction] !== undefined;
+        }
+        if (entry.depth === 'child' && entry.childIndex !== null) {
+            const siblingIdxs = autoEntries
+                .filter(e => e.depth === 'child' && e.mainIndex === entry.mainIndex)
+                .map(e => e.childIndex!)
+                .sort((a, b) => a - b);
+            const pos = siblingIdxs.indexOf(entry.childIndex);
+            return siblingIdxs[pos + direction] !== undefined;
+        }
+        if (entry.depth === 'grand' && entry.childIndex !== null && entry.grandIndex !== null) {
+            const siblingIdxs = autoEntries
+                .filter(e =>
+                    e.depth === 'grand'
+                    && e.mainIndex === entry.mainIndex
+                    && e.childIndex === entry.childIndex
+                )
+                .map(e => e.grandIndex!)
+                .sort((a, b) => a - b);
+            const pos = siblingIdxs.indexOf(entry.grandIndex);
+            return siblingIdxs[pos + direction] !== undefined;
+        }
+        return false;
+    };
+
+    const depthLabel = (d: AutoDepth) =>
+        d === 'parent' ? 'Parent' : d === 'child' ? 'Child' : 'Grand';
 
     const handleEmptyAllSlices = async () => {
         console.log('[Preferences] Empty All Slices button clicked');
@@ -272,6 +485,10 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                     className={activeTab === 'animations' ? 'active' : ''}
                     onClick={() => setActiveTab('animations')}
                 >Animations</button>
+                <button
+                    className={activeTab === 'auto' ? 'active' : ''}
+                    onClick={() => setActiveTab('auto')}
+                >Auto</button>
                 <button
                     className={activeTab === 'advanced' ? 'active' : ''}
                     onClick={() => setActiveTab('advanced')}
@@ -536,6 +753,104 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 <option value="wobble">Wobble</option>
                             </select>
                         </div>
+                    </>
+                )}
+
+                {activeTab === 'auto' && (
+                    <>
+                        <div className="pref-row">
+                            <label style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>Auto folders</label>
+                        </div>
+                        <div className="pref-row" style={{ marginTop: '4px' }}>
+                            <small style={{ color: '#aaa' }}>
+                                Registered Auto sources by depth. Empty tag = all files in that folder only (not recursive).
+                                Reorder with arrows, change folder/tag, then Apply.
+                            </small>
+                        </div>
+                        {autoEntries.length === 0 ? (
+                            <p className="pref-auto-empty">
+                                No Auto folders yet. Right-click a parent or child panel → enable Auto → pick a folder.
+                            </p>
+                        ) : (
+                            <div className="pref-auto-list">
+                                {(['parent', 'child', 'grand'] as AutoDepth[]).map(depth => {
+                                    const group = autoEntries.filter(e => e.depth === depth);
+                                    if (group.length === 0) return null;
+                                    return (
+                                        <React.Fragment key={depth}>
+                                            <div className="pref-auto-group-title">{depthLabel(depth)}</div>
+                                            {group.map(entry => (
+                                                <div
+                                                    key={`${entry.depth}-${entry.mainIndex}-${entry.childIndex}-${entry.grandIndex}`}
+                                                    className="pref-auto-row"
+                                                >
+                                                    <div className="pref-auto-row-head">
+                                                        <span className="pref-auto-depth">{depthLabel(entry.depth)}</span>
+                                                        <span className="pref-auto-label">{entry.name}</span>
+                                                        {entry.context && (
+                                                            <small style={{ color: '#888' }}>under {entry.context}</small>
+                                                        )}
+                                                        <div className="pref-auto-reorder">
+                                                            <button
+                                                                type="button"
+                                                                title="Move up"
+                                                                disabled={!canMoveAuto(entry, -1)}
+                                                                onClick={() => moveAutoEntry(entry, -1)}
+                                                            >
+                                                                <ArrowUp size={14} />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                title="Move down"
+                                                                disabled={!canMoveAuto(entry, 1)}
+                                                                onClick={() => moveAutoEntry(entry, 1)}
+                                                            >
+                                                                <ArrowDown size={14} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <label className="slice-editor-label" style={{ margin: 0 }}>Folder</label>
+                                                    <div className="pref-auto-path-row">
+                                                        <input
+                                                            className="slice-editor-input"
+                                                            type="text"
+                                                            value={entry.folder}
+                                                            onChange={e => {
+                                                                const folder = e.target.value;
+                                                                setMenuItemsDirty(prev => patchAutoItem(prev, entry, { folder }));
+                                                            }}
+                                                            placeholder="Folder path"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            className="slice-editor-browse"
+                                                            disabled={autoBrowseBusy}
+                                                            title="Browse folder"
+                                                            onClick={() => void pickAutoFolder(entry)}
+                                                        >
+                                                            <FolderOpen size={16} />
+                                                        </button>
+                                                    </div>
+                                                    <label className="slice-editor-label" style={{ margin: 0 }}>
+                                                        Tag (empty = all files)
+                                                    </label>
+                                                    <input
+                                                        className="slice-editor-input"
+                                                        type="text"
+                                                        value={entry.tag}
+                                                        onChange={e => {
+                                                            const tag = e.target.value;
+                                                            setMenuItemsDirty(prev => patchAutoItem(prev, entry, { tag }));
+                                                        }}
+                                                        placeholder="Optional filename filter"
+                                                    />
+                                                </div>
+                                            ))}
+                                        </React.Fragment>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </>
                 )}
 

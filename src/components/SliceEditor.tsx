@@ -414,8 +414,12 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
                                     type="text"
                                     value={autoTag}
                                     onChange={e => setAutoTag(e.target.value)}
-                                    placeholder="Only files whose name contains this"
+                                    placeholder="Leave empty = all files in this folder"
                                 />
+                                <small className="slice-editor-auto-hint">
+                                    Empty tag lists every file in the folder (not recursive — subfolders ignored).
+                                    With a tag, only filenames containing that text are included.
+                                </small>
                                 <div className="slice-editor-auto-preview">
                                     {autoPreviewError ? (
                                         <span className="slice-editor-auto-preview-error">{autoPreviewError}</span>
@@ -423,6 +427,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
                                         <>
                                             <span className="slice-editor-auto-preview-count">
                                                 {autoPreview.length} file{autoPreview.length === 1 ? '' : 's'}
+                                                {!autoTag.trim() ? ' · all files' : ` · tag “${autoTag.trim()}”`}
                                                 {autoPreview.length > 8 ? ' · spiral when >8' : ''}
                                             </span>
                                             {autoPreview.slice(0, 5).map((entry, i) => (
