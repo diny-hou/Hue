@@ -10,7 +10,7 @@ import {
 } from '../lib/markingTrail';
 import { resolveGestureThresholds, resolveRingGeometry } from '../lib/ringGeometry';
 import { clampSliceCount, resizeParentItems } from '../lib/sliceCounts';
-import type { WorkspaceChangedPayload } from '../lib/workspace';
+import type { WorkspaceChangedPayload, WorkspaceEntry, WorkspaceStatus } from '../lib/workspace';
 
 export interface AppearanceConfig {
     panel_opacity: number;
@@ -273,6 +273,13 @@ export const PieMenu: React.FC = () => {
     const [previewTab, setPreviewTab] = useState<AppearancePreviewPayload['previewTab']>(null);
     const [workspaceToast, setWorkspaceToast] = useState<string | null>(null);
     const workspaceToastTimerRef = React.useRef<number | null>(null);
+    const [workspaceEntries, setWorkspaceEntries] = useState<WorkspaceEntry[]>([]);
+    const [workspaceActiveIndex, setWorkspaceActiveIndex] = useState(0);
+    const [workspaceMarking, setWorkspaceMarking] = useState(false);
+    const [workspaceHoverIndex, setWorkspaceHoverIndex] = useState<number | null>(null);
+    const workspaceMarkingRef = React.useRef(false);
+    const workspaceHoverIndexRef = React.useRef<number | null>(null);
+    const workspacePointerIdRef = React.useRef<number | null>(null);
     const demoSavedRef = React.useRef<{ main: number | null; child: number | null; grand: number | null } | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const isDraggingRef = React.useRef(false);
@@ -375,6 +382,12 @@ export const PieMenu: React.FC = () => {
                         setConfigFull(config);
                     })
                     .catch(console.error);
+                invoke<WorkspaceStatus>('get_workspace_status')
+                    .then((status) => {
+                        setWorkspaceEntries(status.entries ?? []);
+                        setWorkspaceActiveIndex(status.active_index ?? 0);
+                    })
+                    .catch(console.error);
                 setIsVisible(true);
                 lastShowTimeRef.current = Date.now();
             });
@@ -382,6 +395,11 @@ export const PieMenu: React.FC = () => {
                 if (isEditorOpenRef.current || isPreferencesOpenRef.current) return;
                 setIsVisible(false);
                 setIsDragging(false);
+                workspaceMarkingRef.current = false;
+                workspacePointerIdRef.current = null;
+                setWorkspaceMarking(false);
+                workspaceHoverIndexRef.current = null;
+                setWorkspaceHoverIndex(null);
                 lockLevelRef.current = 0;
                 lockedMainRef.current = null;
                 stickyChildRef.current = null;
@@ -476,6 +494,11 @@ export const PieMenu: React.FC = () => {
                 });
             });
             const l9 = await listen<WorkspaceChangedPayload>('workspace-changed', (event) => {
+                const status = event.payload?.status;
+                if (status) {
+                    setWorkspaceEntries(status.entries ?? []);
+                    setWorkspaceActiveIndex(status.active_index ?? 0);
+                }
                 const msg = event.payload?.message?.trim();
                 if (!msg) return;
                 if (workspaceToastTimerRef.current !== null) {
@@ -636,10 +659,17 @@ export const PieMenu: React.FC = () => {
     const showThresholdRings = gestureDebug || gestureCapture || prefsOpen;
     /** HUD + capture analytics during debug/capture, or marking test in Preferences. */
     const showGestureOverlay = gestureDebug || gestureCapture || (prefsOpen && isDragging);
-    /** Product marking trail — always on while dragging (except capture mode). */
-    const showMarkingTrail = isDragging && !gestureCapture;
+    /** Product marking trail — left-drag or workspace middle-drag (except capture mode). */
+    const showMarkingTrail = (isDragging || workspaceMarking) && !gestureCapture;
     const th = resolveGestureThresholds(configFull?.appearance);
     const DEAD_ZONE = 40;
+
+    /** Far ring for workspace presets (beyond grand). */
+    const workspaceInnerRadius = Math.min(grandOuterRadius + 18, 455);
+    const workspaceOuterRadius = Math.min(workspaceInnerRadius + 70, 495);
+    const workspaceCount = workspaceEntries.length;
+    const workspaceSliceAngle = workspaceCount > 0 ? 360 / workspaceCount : 360;
+    const workspaceHalfSlice = workspaceSliceAngle / 2;
 
     useEffect(() => {
         const canvas = markingCanvasRef.current;
@@ -785,6 +815,110 @@ export const PieMenu: React.FC = () => {
     const revealActivePanelPathRef = React.useRef(revealActivePanelPath);
     revealActivePanelPathRef.current = revealActivePanelPath;
 
+    const showWorkspaceToast = (msg: string) => {
+        if (workspaceToastTimerRef.current !== null) {
+            window.clearTimeout(workspaceToastTimerRef.current);
+        }
+        setWorkspaceToast(msg);
+        workspaceToastTimerRef.current = window.setTimeout(() => {
+            setWorkspaceToast(null);
+            workspaceToastTimerRef.current = null;
+        }, 2200);
+    };
+
+    const updateWorkspaceHoverFromPoint = (clientX: number, clientY: number, currentTarget: EventTarget | null) => {
+        const el = (currentTarget as HTMLElement | null)
+            ?? document.querySelector('.pie-menu-container');
+        if (!el?.getBoundingClientRect) return;
+        const rect = el.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+        const scaleX = size / rect.width;
+        const scaleY = size / rect.height;
+        const dx = (clientX - rect.left) * scaleX - center;
+        const dy = (clientY - rect.top) * scaleY - center;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        lastDistanceRef.current = distance;
+
+        let angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+        angleDeg = (angleDeg + 90 + 360) % 360;
+        lastAngleRef.current = angleDeg;
+
+        pushMarkingTrail(center + dx, center + dy);
+
+        const n = workspaceEntries.length;
+        if (n <= 0 || distance < DEAD_ZONE) {
+            workspaceHoverIndexRef.current = null;
+            setWorkspaceHoverIndex(null);
+            return;
+        }
+        const idx = Math.floor(((angleDeg + workspaceHalfSlice) % 360) / workspaceSliceAngle);
+        workspaceHoverIndexRef.current = idx;
+        setWorkspaceHoverIndex(idx);
+    };
+
+    const endWorkspaceMarking = (apply: boolean) => {
+        if (!workspaceMarkingRef.current) return;
+        const idx = workspaceHoverIndexRef.current;
+        const dist = lastDistanceRef.current;
+        const pid = workspacePointerIdRef.current;
+
+        workspaceMarkingRef.current = false;
+        workspacePointerIdRef.current = null;
+        setWorkspaceMarking(false);
+        clearMarkingTrail();
+
+        if (pid !== null) {
+            const el = document.querySelector('.pie-menu-container');
+            if (el) {
+                try {
+                    (el as HTMLElement).releasePointerCapture(pid);
+                } catch {
+                    /* ignore */
+                }
+            }
+        }
+
+        const n = workspaceEntries.length;
+        const applyIdx = apply && idx !== null && idx >= 0 && idx < n ? idx : null;
+        if (applyIdx !== null && dist >= workspaceInnerRadius) {
+            void invoke<WorkspaceStatus>('switch_workspace', { index: applyIdx })
+                .then(() => {
+                    dismissMenu();
+                })
+                .catch((err) => {
+                    console.error('[Hue] switch_workspace failed:', err);
+                    showWorkspaceToast(String(err));
+                });
+        }
+
+        workspaceHoverIndexRef.current = null;
+        setWorkspaceHoverIndex(null);
+    };
+
+    const startWorkspaceMarking = (e: React.PointerEvent) => {
+        if (isPreferencesOpenRef.current || isEditorOpenRef.current) return;
+        if (workspaceMarkingRef.current) return;
+        if (workspaceEntries.length === 0) {
+            showWorkspaceToast('No workspaces yet — save one in Preferences → General');
+            return;
+        }
+        workspaceMarkingRef.current = true;
+        workspacePointerIdRef.current = e.pointerId;
+        setWorkspaceMarking(true);
+        workspaceHoverIndexRef.current = workspaceActiveIndex < workspaceEntries.length
+            ? workspaceActiveIndex
+            : 0;
+        setWorkspaceHoverIndex(workspaceHoverIndexRef.current);
+        clearMarkingTrail();
+        const container = document.querySelector('.pie-menu-container') as HTMLElement | null;
+        try {
+            (container ?? e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        } catch {
+            /* ignore */
+        }
+        updateWorkspaceHoverFromPoint(e.clientX, e.clientY, container ?? e.currentTarget);
+    };
+
     const endDragGesture = (e?: { currentTarget?: EventTarget | null; pointerId?: number }) => {
         if (!isDraggingRef.current) return;
         if (isEditorOpenRef.current) return;
@@ -861,12 +995,18 @@ export const PieMenu: React.FC = () => {
         if (e.button === 1) {
             e.preventDefault();
             e.stopPropagation();
-            if (!isPreferencesOpenRef.current) {
-                revealActivePanelPath();
+            // During a left-button marking drag, middle-click still reveals the path.
+            if (isDraggingRef.current) {
+                if (!isPreferencesOpenRef.current) {
+                    revealActivePanelPath();
+                }
+                return;
             }
+            startWorkspaceMarking(e);
             return;
         }
         if (e.button !== 0) return;
+        if (workspaceMarkingRef.current) return;
         if (isEditorOpenRef.current) return;
         if (debugReviewTimerRef.current !== null) {
             window.clearTimeout(debugReviewTimerRef.current);
@@ -895,6 +1035,10 @@ export const PieMenu: React.FC = () => {
     };
 
     const handlePointerMove = (e: React.PointerEvent) => {
+        if (workspaceMarkingRef.current) {
+            updateWorkspaceHoverFromPoint(e.clientX, e.clientY, e.currentTarget);
+            return;
+        }
         if (!isDraggingRef.current) {
             return;
         }
@@ -1174,25 +1318,52 @@ export const PieMenu: React.FC = () => {
             openEditorAtClientPoint(e.clientX, e.clientY, e.currentTarget);
             return;
         }
+        if (e.button === 1) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (workspaceMarkingRef.current) {
+                endWorkspaceMarking(true);
+            }
+            return;
+        }
         if (e.button !== 0) return;
         endDragGesture(e);
     };
 
     const handlePointerCancel = (e: React.PointerEvent) => {
+        if (workspaceMarkingRef.current) {
+            endWorkspaceMarking(false);
+            return;
+        }
         endDragGesture(e);
     };
 
     // Backup: if capture fails, window still ends the drag when releasing outside the pie
     useEffect(() => {
-        if (!isDragging) return;
+        if (!isDragging && !workspaceMarking) return;
         const onWinUp = (ev: PointerEvent) => {
+            if (workspaceMarkingRef.current && ev.button === 1) {
+                endWorkspaceMarking(true);
+                return;
+            }
             if (ev.button !== 0) return;
             endDragGesture();
         };
-        const onWinCancel = () => endDragGesture();
+        const onWinCancel = () => {
+            if (workspaceMarkingRef.current) {
+                endWorkspaceMarking(false);
+                return;
+            }
+            endDragGesture();
+        };
+        const onWinMove = (ev: PointerEvent) => {
+            if (!workspaceMarkingRef.current) return;
+            updateWorkspaceHoverFromPoint(ev.clientX, ev.clientY, null);
+        };
         // Middle button while left is captured often arrives on window, not the pie target
         const onWinMiddleDown = (ev: PointerEvent) => {
             if (ev.button !== 1) return;
+            if (!isDraggingRef.current) return;
             ev.preventDefault();
             ev.stopPropagation();
             revealActivePanelPathRef.current();
@@ -1204,15 +1375,17 @@ export const PieMenu: React.FC = () => {
         };
         window.addEventListener('pointerup', onWinUp);
         window.addEventListener('pointercancel', onWinCancel);
+        window.addEventListener('pointermove', onWinMove);
         window.addEventListener('pointerdown', onWinMiddleDown, true);
         window.addEventListener('mousedown', onWinMiddleMouseDown, true);
         return () => {
             window.removeEventListener('pointerup', onWinUp);
             window.removeEventListener('pointercancel', onWinCancel);
+            window.removeEventListener('pointermove', onWinMove);
             window.removeEventListener('pointerdown', onWinMiddleDown, true);
             window.removeEventListener('mousedown', onWinMiddleMouseDown, true);
         };
-    }, [isDragging]);
+    }, [isDragging, workspaceMarking]);
 
     const lastEditorOpenMsRef = React.useRef(0);
 
@@ -1436,13 +1609,15 @@ export const PieMenu: React.FC = () => {
     // If any sub can open a grand ring, keep the hit disk large from the moment the parent opens
     // so the pointer is not clipped by OS click-through before React expands the ring.
     const hitDiskRadius =
-        forceDemoRings || (isGroupOpen && groupHasGrandRing(items[activeIndex!]))
-            ? grandOuterRadius
-            : isGrandGroupOpen
+        workspaceMarking
+            ? workspaceOuterRadius
+            : forceDemoRings || (isGroupOpen && groupHasGrandRing(items[activeIndex!]))
                 ? grandOuterRadius
-                : isGroupOpen
-                    ? childOuterRadius
-                    : outerRadius;
+                : isGrandGroupOpen
+                    ? grandOuterRadius
+                    : isGroupOpen
+                        ? childOuterRadius
+                        : outerRadius;
 
     clickThroughStateRef.current = {
         editorOpen: editingIndex !== null,
@@ -1451,7 +1626,7 @@ export const PieMenu: React.FC = () => {
 
     return (
         <div
-            className={`pie-menu-container ${isVisible ? 'visible' : ''} ${animClass}${isDragging ? ' dragging' : ''}${prefsOpen ? ' prefs-marking-test' : ''}`}
+            className={`pie-menu-container ${isVisible ? 'visible' : ''} ${animClass}${isDragging ? ' dragging' : ''}${workspaceMarking ? ' workspace-marking' : ''}${prefsOpen ? ' prefs-marking-test' : ''}`}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
@@ -1595,6 +1770,29 @@ export const PieMenu: React.FC = () => {
                         );
                     });
                 })()}
+                {/* ── Workspace preset far ring (middle-drag marking) ── */}
+                {workspaceMarking && workspaceCount > 0 && workspaceEntries.map((entry, index) => {
+                    const startAngle = index * workspaceSliceAngle - workspaceHalfSlice;
+                    const endAngle = startAngle + workspaceSliceAngle - 2;
+                    const pathD = describeArc(
+                        center,
+                        center,
+                        workspaceInnerRadius,
+                        workspaceOuterRadius,
+                        startAngle,
+                        endAngle,
+                    );
+                    const isHover = workspaceHoverIndex === index;
+                    const isActiveWs = index === workspaceActiveIndex;
+                    return (
+                        <path
+                            key={`workspace-${entry.path}-${index}`}
+                            d={pathD}
+                            className={`slice-path workspace-slice${isHover ? ' active' : ''}${isActiveWs ? ' workspace-slice-current' : ''}`}
+                            style={{ opacity: isHover ? 1 : isActiveWs ? 0.75 : 0.45 }}
+                        />
+                    );
+                })}
             </svg>
 
             {showMarkingTrail && (
@@ -1838,7 +2036,30 @@ export const PieMenu: React.FC = () => {
                 );
             })}
 
-            {/* Center label — right-click: Preferences · middle-click: cycle workspace */}
+            {/* Workspace far-ring labels */}
+            {workspaceMarking && workspaceCount > 0 && workspaceEntries.map((entry, index) => {
+                const midAngle = index * workspaceSliceAngle;
+                const textRadius = (workspaceInnerRadius + workspaceOuterRadius) / 2;
+                const angleInRadians = ((midAngle - 90) * Math.PI) / 180.0;
+                const x = center + textRadius * Math.cos(angleInRadians);
+                const y = center + textRadius * Math.sin(angleInRadians);
+                const isHover = workspaceHoverIndex === index;
+                return (
+                    <div
+                        key={`workspace-label-${entry.path}-${index}`}
+                        className={`slice-content workspace-label${isHover ? ' active' : ''}`}
+                        style={{
+                            left: `${x}px`,
+                            top: `${y}px`,
+                            opacity: isHover ? 1 : 0.7,
+                        }}
+                    >
+                        {entry.name}
+                    </div>
+                );
+            })}
+
+            {/* Center label — right-click: Preferences · middle-drag: workspace presets */}
             <div
                 className="center-hole"
                 onPointerDown={e => {
@@ -1846,10 +2067,7 @@ export const PieMenu: React.FC = () => {
                     e.preventDefault();
                     e.stopPropagation();
                     if (isDraggingRef.current || isPreferencesOpenRef.current) return;
-                    void invoke('cycle_workspace').catch((err) => {
-                        console.error('[Hue] cycle_workspace failed:', err);
-                        setWorkspaceToast(String(err));
-                    });
+                    startWorkspaceMarking(e);
                 }}
                 onContextMenu={e => {
                     e.preventDefault();
@@ -1857,7 +2075,7 @@ export const PieMenu: React.FC = () => {
                     isPreferencesOpenRef.current = true;
                     invoke('open_preferences_window').catch(console.error);
                 }}
-                title="Right-click: Preferences · Middle-click: switch workspace"
+                title="Right-click: Preferences · Middle-drag out: switch workspace"
             >
                 {(configFull?.appearance?.center_label ?? 'HUE').trim() && (
                     <div className="center-text">

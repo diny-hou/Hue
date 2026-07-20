@@ -923,7 +923,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         <div className="pref-row">
                             <small style={{ color: '#aaa' }}>
                                 A workspace is a full snapshot (theme, colors, menu paths, Auto folders, hotkey).
-                                Saved as a <code>.hue</code> JSON file. Middle-click the pie center to cycle.
+                                Saved as a <code>.hue</code> JSON file. Middle-drag from the pie center onto a far-ring preset to apply it.
                             </small>
                         </div>
                         <div className="pref-row">
