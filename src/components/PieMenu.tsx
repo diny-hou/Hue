@@ -932,6 +932,13 @@ export const PieMenu: React.FC = () => {
     };
 
     const handlePointerUp = (e: React.PointerEvent) => {
+        // Fallback: some WebViews drop contextmenu while left-button capture is held
+        if (e.button === 2) {
+            e.preventDefault();
+            e.stopPropagation();
+            openEditorAtClientPoint(e.clientX, e.clientY, e.currentTarget);
+            return;
+        }
         if (e.button !== 0) return;
         endDragGesture(e);
     };
@@ -956,6 +963,8 @@ export const PieMenu: React.FC = () => {
         };
     }, [isDragging]);
 
+    const lastEditorOpenMsRef = React.useRef(0);
+
     /** Stop marking drag without launch/dismiss so a slice editor can open. */
     const abortDragForEditor = (target: EventTarget | null) => {
         if (!isDraggingRef.current) return;
@@ -973,18 +982,25 @@ export const PieMenu: React.FC = () => {
         finalizeCapture();
     };
 
-    // Right-click opens slice editor. Pointer capture steals path-level contextmenu during drag,
-    // so resolve the hit from cursor position on the container.
-    const handleContextMenu = (e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
+    /** Resolve pie coords → open slice editor. Shared by contextmenu + right-button pointerup. */
+    const openEditorAtClientPoint = (
+        clientX: number,
+        clientY: number,
+        currentTarget: EventTarget | null,
+    ) => {
         if (isEditorOpenRef.current) return;
+        const now = Date.now();
+        if (now - lastEditorOpenMsRef.current < 280) return;
 
-        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const el = currentTarget as HTMLElement | null;
+        if (!el?.getBoundingClientRect) return;
+        const rect = el.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+
         const scaleX = size / rect.width;
         const scaleY = size / rect.height;
-        const dx = (e.clientX - rect.left) * scaleX - center;
-        const dy = (e.clientY - rect.top) * scaleY - center;
+        const dx = (clientX - rect.left) * scaleX - center;
+        const dy = (clientY - rect.top) * scaleY - center;
         const distance = Math.sqrt(dx * dx + dy * dy);
         let angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
         angleDeg = (angleDeg + 90 + 360) % 360;
@@ -993,7 +1009,10 @@ export const PieMenu: React.FC = () => {
         const slotIdx = Math.floor(((angleDeg + childHalfSlice) % 360) / childSliceAngle);
 
         const parentIdx = lockedMainRef.current
-            ?? (activeIndex !== null && isGroupItem(items[activeIndex]) ? activeIndex : null);
+            ?? (activeIndex !== null && isGroupItem(items[activeIndex]) ? activeIndex : null)
+            ?? (hoveredIndexRef.current !== null && isGroupItem(items[hoveredIndexRef.current])
+                ? hoveredIndexRef.current
+                : null);
         const parentItem = parentIdx !== null ? items[parentIdx] : undefined;
         const childList = parentItem?.children ?? [];
         const childSpiralCtx = isAutoGroup(parentItem) && childList.length > maxChildrenVisible;
@@ -1010,32 +1029,38 @@ export const PieMenu: React.FC = () => {
             ? (grandSpiralBase + slotIdx) % grandList.length
             : slotIdx;
 
-        abortDragForEditor(e.currentTarget);
+        abortDragForEditor(currentTarget);
+
+        const inChildBand =
+            distance >= childInnerRadius - 8
+            && distance <= childOuterRadius + 8;
+        const inGrandBand =
+            distance > childOuterRadius - 8
+            && distance <= grandOuterRadius + 24;
 
         // Grand ring
         if (
             parentIdx !== null
             && stickyChild !== null
             && isGroupItem(childItem)
-            && distance >= childOuterRadius
-            && distance <= grandOuterRadius + 20
+            && inGrandBand
             && slotIdx >= 0
             && slotIdx < maxChildrenVisible
         ) {
+            lastEditorOpenMsRef.current = now;
             handleOpenEditor(parentIdx, stickyChild, grandDataIdx);
             return;
         }
 
-        // Child ring (including while grand ring is open — edit the child under the cursor)
+        // Child ring — always allow (empty slots open editor to configure)
         if (
             parentIdx !== null
             && isGroupItem(parentItem)
-            && distance >= childInnerRadius
-            && distance < childOuterRadius
+            && inChildBand
             && slotIdx >= 0
             && slotIdx < maxChildrenVisible
-            && (childSpiralCtx || slotIdx < childList.length)
         ) {
+            lastEditorOpenMsRef.current = now;
             handleOpenEditor(parentIdx, childDataIdx);
             return;
         }
@@ -1047,8 +1072,16 @@ export const PieMenu: React.FC = () => {
             && potentialMainIndex >= 0
             && potentialMainIndex < items.length
         ) {
+            lastEditorOpenMsRef.current = now;
             handleOpenEditor(potentialMainIndex);
         }
+    };
+
+    // Right-click opens slice editor. Pointer capture can steal path-level contextmenu during drag.
+    const handleContextMenu = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openEditorAtClientPoint(e.clientX, e.clientY, e.currentTarget);
     };
 
     const handleOpenEditor = (index: number, childIdx: number | null = null, grandchildIdx: number | null = null) => {
@@ -1261,7 +1294,9 @@ export const PieMenu: React.FC = () => {
                                 onContextMenu={e => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    if (hasContent || parentAuto) handleOpenEditor(activeIndex, dataIdx);
+                                    abortDragForEditor(e.currentTarget.ownerSVGElement?.parentElement ?? null);
+                                    lastEditorOpenMsRef.current = Date.now();
+                                    handleOpenEditor(activeIndex, dataIdx);
                                 }}
                             />
                         );
@@ -1289,10 +1324,13 @@ export const PieMenu: React.FC = () => {
                                 key={`grand-${activeIndex}-${activeChildIndex}-${slotIdx}-${dataIdx}`}
                                 d={pathD}
                                 className={`slice-path outer-slice${childAuto ? ' auto-slice' : ''} ${isGrandActive ? 'active' : ''} ${hoverAnimClass}`}
+                                style={{ opacity: !hasContent ? 0.15 : undefined }}
                                 onContextMenu={e => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    if (hasContent || childAuto) handleOpenEditor(activeIndex, activeChildIndex, dataIdx);
+                                    abortDragForEditor(e.currentTarget.ownerSVGElement?.parentElement ?? null);
+                                    lastEditorOpenMsRef.current = Date.now();
+                                    handleOpenEditor(activeIndex, activeChildIndex, dataIdx);
                                 }}
                             />
                         );
@@ -1421,12 +1459,20 @@ export const PieMenu: React.FC = () => {
                                 if (e.button === 2) e.stopPropagation();
                             }}
                             onPointerUp={e => {
-                                if (e.button === 2) e.stopPropagation();
+                                if (e.button === 2) {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    abortDragForEditor(e.currentTarget.parentElement);
+                                    lastEditorOpenMsRef.current = Date.now();
+                                    handleOpenEditor(activeIndex, dataIdx);
+                                }
                             }}
                             onContextMenu={e => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                if (!isPlaceholder || parentAuto) handleOpenEditor(activeIndex, dataIdx);
+                                abortDragForEditor(e.currentTarget.parentElement);
+                                lastEditorOpenMsRef.current = Date.now();
+                                handleOpenEditor(activeIndex, dataIdx);
                             }}
                         >
                             {parentAuto && !isPlaceholder && (
@@ -1473,12 +1519,20 @@ export const PieMenu: React.FC = () => {
                                 if (e.button === 2) e.stopPropagation();
                             }}
                             onPointerUp={e => {
-                                if (e.button === 2) e.stopPropagation();
+                                if (e.button === 2) {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    abortDragForEditor(e.currentTarget.parentElement);
+                                    lastEditorOpenMsRef.current = Date.now();
+                                    handleOpenEditor(activeIndex, activeChildIndex, dataIdx);
+                                }
                             }}
                             onContextMenu={e => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                if (!isPlaceholder || childAuto) handleOpenEditor(activeIndex, activeChildIndex, dataIdx);
+                                abortDragForEditor(e.currentTarget.parentElement);
+                                lastEditorOpenMsRef.current = Date.now();
+                                handleOpenEditor(activeIndex, activeChildIndex, dataIdx);
                             }}
                         >
                             {childAuto && !isPlaceholder && (
