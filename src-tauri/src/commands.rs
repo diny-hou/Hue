@@ -83,6 +83,46 @@ pub fn hide_menu(app_handle: tauri::AppHandle) {
     }
 }
 
+/// Open the parent folder in Explorer and select (highlight) the file or folder.
+#[tauri::command]
+pub fn reveal_in_explorer(app_handle: tauri::AppHandle, path: String) -> Result<(), String> {
+    let clean = path.trim().trim_matches('"').trim_matches('\'');
+    if clean.is_empty() {
+        return Err("Empty path".into());
+    }
+
+    let p = std::path::Path::new(clean);
+    if !p.exists() {
+        return Err(format!("Path not found: {clean}"));
+    }
+
+    let abs = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    // Windows canonicalize adds \\?\ — Explorer /select often fails with that prefix
+    let abs_str = {
+        let s = abs.to_string_lossy();
+        if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+            format!(r"\\{rest}")
+        } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+            rest.to_string()
+        } else {
+            s.into_owned()
+        }
+    };
+
+    // explorer /select,<path> opens the containing folder with the item highlighted
+    Command::new("explorer")
+        .arg(format!("/select,{abs_str}"))
+        .spawn()
+        .map_err(|e| format!("Failed to open Explorer: {e}"))?;
+
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.set_ignore_cursor_events(false);
+        let _ = window.hide();
+    }
+
+    Ok(())
+}
+
 /// When the main window uses transparency, OS hit-testing still covers the full rectangle.
 /// Toggle pass-through so clicks outside the pie / editor hit regions reach windows behind Hue.
 #[tauri::command]

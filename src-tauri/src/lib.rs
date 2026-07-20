@@ -71,6 +71,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::launch_app,
+            commands::reveal_in_explorer,
             commands::hide_menu,
             commands::sync_main_click_through,
             commands::reset_main_click_through,

@@ -108,6 +108,16 @@ function isAutoGroup(item: MenuItem | undefined): boolean {
     return !!item?.auto?.enabled;
 }
 
+/** Path to reveal in Explorer: assigned path, else Auto source folder. */
+function resolveRevealPath(item: MenuItem | undefined): string | null {
+    if (!item) return null;
+    const path = item.path?.trim();
+    if (path) return path;
+    const folder = item.auto?.folder?.trim();
+    if (folder) return folder;
+    return null;
+}
+
 function positiveMod(n: number, m: number): number {
     if (m <= 0) return 0;
     return ((n % m) + m) % m;
@@ -574,6 +584,74 @@ export const PieMenu: React.FC = () => {
         invoke('hide_menu').catch(console.error);
     };
 
+    /**
+     * During a marking drag, middle-click reveals the active parent/child/grand
+     * path in Explorer (folder open + item selected). Ends the gesture without launch.
+     */
+    const revealActivePanelPath = () => {
+        if (!isDraggingRef.current) return;
+        if (isEditorOpenRef.current) return;
+
+        const launchMain = lockedMainRef.current ?? hoveredIndexRef.current;
+        if (launchMain === null) return;
+
+        const currentItem = configRef.current[launchMain];
+        const launchChild = stickyChildRef.current;
+        const launchGrand = stickyGrandRef.current;
+
+        let path: string | null = null;
+        if (
+            launchChild !== null
+            && launchGrand !== null
+            && currentItem?.children
+            && currentItem.children.length > launchChild
+        ) {
+            path = resolveRevealPath(currentItem.children[launchChild]?.children?.[launchGrand]);
+        } else if (
+            launchChild !== null
+            && currentItem?.children
+            && currentItem.children.length > launchChild
+        ) {
+            path = resolveRevealPath(currentItem.children[launchChild]);
+        } else {
+            path = resolveRevealPath(currentItem);
+        }
+
+        if (!path) return;
+
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        const pid = dragPointerIdRef.current;
+        dragPointerIdRef.current = null;
+
+        lockLevelRef.current = 0;
+        lockedMainRef.current = null;
+        stickyChildRef.current = null;
+        stickyGrandRef.current = null;
+        childLockedRef.current = false;
+        finalizeCapture();
+
+        invoke('reveal_in_explorer', { path }).catch(err => {
+            console.error('[Hue] reveal_in_explorer failed:', err);
+        });
+        dismissMenu();
+
+        // Best-effort: drop left-button capture so a later pointerup does not relaunch
+        if (pid !== null) {
+            const el = document.querySelector('.pie-menu-container');
+            if (el) {
+                try {
+                    (el as HTMLElement).releasePointerCapture(pid);
+                } catch {
+                    /* ignore */
+                }
+            }
+        }
+    };
+
+    const revealActivePanelPathRef = React.useRef(revealActivePanelPath);
+    revealActivePanelPathRef.current = revealActivePanelPath;
+
     const endDragGesture = (e?: { currentTarget?: EventTarget | null; pointerId?: number }) => {
         if (!isDraggingRef.current) return;
         if (isEditorOpenRef.current) return;
@@ -632,6 +710,13 @@ export const PieMenu: React.FC = () => {
     };
 
     const handlePointerDown = (e: React.PointerEvent) => {
+        // Middle-click while marking: reveal active panel path in Explorer
+        if (e.button === 1) {
+            e.preventDefault();
+            e.stopPropagation();
+            revealActivePanelPath();
+            return;
+        }
         if (e.button !== 0) return;
         if (isEditorOpenRef.current) return;
         if (debugReviewTimerRef.current !== null) {
@@ -955,11 +1040,27 @@ export const PieMenu: React.FC = () => {
             endDragGesture();
         };
         const onWinCancel = () => endDragGesture();
+        // Middle button while left is captured often arrives on window, not the pie target
+        const onWinMiddleDown = (ev: PointerEvent) => {
+            if (ev.button !== 1) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            revealActivePanelPathRef.current();
+        };
+        const onWinMiddleMouseDown = (ev: MouseEvent) => {
+            if (ev.button !== 1) return;
+            // Prevent browser autoscroll / default middle-click behavior
+            ev.preventDefault();
+        };
         window.addEventListener('pointerup', onWinUp);
         window.addEventListener('pointercancel', onWinCancel);
+        window.addEventListener('pointerdown', onWinMiddleDown, true);
+        window.addEventListener('mousedown', onWinMiddleMouseDown, true);
         return () => {
             window.removeEventListener('pointerup', onWinUp);
             window.removeEventListener('pointercancel', onWinCancel);
+            window.removeEventListener('pointerdown', onWinMiddleDown, true);
+            window.removeEventListener('mousedown', onWinMiddleMouseDown, true);
         };
     }, [isDragging]);
 
