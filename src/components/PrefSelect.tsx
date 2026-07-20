@@ -106,5 +106,5 @@ export const HOVER_ANIMATION_OPTIONS: PrefSelectOption[] = [
 
 export const PREFS_CHROME_OPTIONS: PrefSelectOption[] = [
     { value: 'normal', label: 'Normal' },
-    { value: 'liquid_glass', label: 'Liquid Glass' },
+    { value: 'glass', label: 'Glass' },
 ];

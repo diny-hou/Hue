@@ -42,7 +42,7 @@ export interface AppearanceConfig {
     prefs_bg?: string;
     prefs_accent?: string;
     prefs_text?: string;
-    prefs_chrome?: 'normal' | 'liquid_glass' | string;
+    prefs_chrome?: 'normal' | 'glass' | string;
     center_label?: string;
 }
 

@@ -992,7 +992,7 @@ body {
   z-index: 1000;
 }
 
-.preferences-modal--liquid-glass {
+.preferences-modal--glass {
   background: color-mix(in srgb, var(--prefs-bg, #252830) 72%, transparent);
   backdrop-filter: blur(28px) saturate(1.35);
   -webkit-backdrop-filter: blur(28px) saturate(1.35);

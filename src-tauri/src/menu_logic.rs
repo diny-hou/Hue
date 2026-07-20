@@ -68,7 +68,7 @@ pub struct AppearanceConfig {
     pub prefs_accent: String,
     #[serde(default = "default_prefs_text")]
     pub prefs_text: String,
-    /// "normal" | "liquid_glass"
+    /// "normal" | "glass"
     #[serde(default = "default_prefs_chrome")]
     pub prefs_chrome: String,
     #[serde(default = "default_center_label")]

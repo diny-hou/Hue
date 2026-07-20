@@ -29,6 +29,11 @@ import {
     PrefSelect,
 } from './PrefSelect';
 
+function normalizePrefsChrome(value?: string): string {
+    if (value === 'liquid_glass') return 'glass';
+    return value ?? DEFAULT_APPEARANCE.prefs_chrome!;
+}
+
 function PrefTabReset({ onReset }: { onReset: () => void }) {
     return (
         <button type="button" className="pref-tab-reset" onClick={onReset}>
@@ -278,7 +283,9 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     const [prefsBg, setPrefsBg] = useState(config.appearance?.prefs_bg ?? DEFAULT_APPEARANCE.prefs_bg!);
     const [prefsAccent, setPrefsAccent] = useState(config.appearance?.prefs_accent ?? DEFAULT_APPEARANCE.prefs_accent!);
     const [prefsText, setPrefsText] = useState(config.appearance?.prefs_text ?? DEFAULT_APPEARANCE.prefs_text!);
-    const [prefsChrome, setPrefsChrome] = useState(config.appearance?.prefs_chrome ?? DEFAULT_APPEARANCE.prefs_chrome!);
+    const [prefsChrome, setPrefsChrome] = useState(
+        () => normalizePrefsChrome(config.appearance?.prefs_chrome),
+    );
     const [centerLabel, setCenterLabel] = useState(config.appearance?.center_label ?? DEFAULT_APPEARANCE.center_label!);
 
     const [isRecording, setIsRecording] = useState(false);
@@ -373,7 +380,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         if (d.prefs_bg !== undefined) setPrefsBg(d.prefs_bg);
         if (d.prefs_accent !== undefined) setPrefsAccent(d.prefs_accent);
         if (d.prefs_text !== undefined) setPrefsText(d.prefs_text);
-        if (d.prefs_chrome !== undefined) setPrefsChrome(d.prefs_chrome);
+        if (d.prefs_chrome !== undefined) setPrefsChrome(normalizePrefsChrome(d.prefs_chrome));
         if (d.center_label !== undefined) setCenterLabel(d.center_label);
         window.setTimeout(() => emitPreview(extra), 0);
     };
@@ -618,7 +625,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     return (
         <div className="preferences-shell">
             <div
-                className={`preferences-modal${prefsChrome === 'liquid_glass' ? ' preferences-modal--liquid-glass' : ''}`}
+                className={`preferences-modal${prefsChrome === 'glass' ? ' preferences-modal--glass' : ''}`}
                 style={{
                     ['--prefs-bg' as string]: prefsBg,
                     ['--prefs-accent' as string]: prefsAccent,
