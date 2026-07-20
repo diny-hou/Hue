@@ -634,8 +634,13 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                     }
                 }}
             >
-                <span>Hue Preferences</span>
-                <span className="preferences-version">v{appVersion}</span>
+                <div className="preferences-header-text">
+                    <span>Hue Preferences</span>
+                    <span className="preferences-version">v{appVersion}</span>
+                </div>
+                <p className="preferences-marking-hint">
+                    Drag on the pie to test marking gestures — preview only, nothing launches.
+                </p>
             </div>
 
             <div className="pref-tabs">

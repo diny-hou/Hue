@@ -534,7 +534,7 @@ export const PieMenu: React.FC = () => {
 
     useEffect(() => {
         if (!demoPreviewActive) {
-            if (demoSavedRef.current) {
+            if (demoSavedRef.current && !isDraggingRef.current) {
                 updateActiveIndex(demoSavedRef.current.main);
                 updateActiveChildIndex(demoSavedRef.current.child);
                 setActiveGrandchildIndex(demoSavedRef.current.grand);
@@ -542,6 +542,7 @@ export const PieMenu: React.FC = () => {
             }
             return;
         }
+        if (isDraggingRef.current) return;
         if (!demoSavedRef.current) {
             demoSavedRef.current = {
                 main: activeIndex,
@@ -587,7 +588,8 @@ export const PieMenu: React.FC = () => {
     const gestureCapture = !!configFull?.appearance?.gesture_path_capture;
     /** Rings while debug/capture OR Preferences open (live threshold tuning). */
     const showThresholdRings = gestureDebug || gestureCapture || prefsOpen;
-    const showGestureOverlay = gestureDebug || gestureCapture;
+    /** Trail + HUD during debug/capture, or marking test drags while Preferences is open. */
+    const showGestureOverlay = gestureDebug || gestureCapture || (prefsOpen && isDragging);
     const th = resolveGestureThresholds(configFull?.appearance);
     const DEAD_ZONE = 40;
 
@@ -724,6 +726,7 @@ export const PieMenu: React.FC = () => {
     const endDragGesture = (e?: { currentTarget?: EventTarget | null; pointerId?: number }) => {
         if (!isDraggingRef.current) return;
         if (isEditorOpenRef.current) return;
+        const prefsTest = isPreferencesOpenRef.current;
         isDraggingRef.current = false;
         setIsDragging(false);
 
@@ -739,13 +742,28 @@ export const PieMenu: React.FC = () => {
         const launchGrand = stickyGrandRef.current;
         const launchMain = lockedMainRef.current ?? hoveredIndexRef.current;
 
-        finalizeCapture();
+        if (!prefsTest) {
+            finalizeCapture();
+        }
 
         lockLevelRef.current = 0;
         lockedMainRef.current = null;
         stickyChildRef.current = null;
         stickyGrandRef.current = null;
         childLockedRef.current = false;
+
+        if (prefsTest) {
+            trailRef.current = [];
+            setGestureTrail([]);
+            setDebugHud(null);
+            resetSpiralRefs();
+            if (launchMain !== null && lastDistanceRef.current >= DEAD_ZONE) {
+                updateActiveIndex(launchMain);
+                updateActiveChildIndex(launchChild);
+                setActiveGrandchildIndex(launchGrand);
+            }
+            return;
+        }
 
         if (launchMain !== null) {
             const currentItem = configRef.current[launchMain];
@@ -779,12 +797,12 @@ export const PieMenu: React.FC = () => {
     };
 
     const handlePointerDown = (e: React.PointerEvent) => {
-        if (isPreferencesOpenRef.current) return;
-        // Middle-click while marking: reveal active panel path in Explorer
         if (e.button === 1) {
             e.preventDefault();
             e.stopPropagation();
-            revealActivePanelPath();
+            if (!isPreferencesOpenRef.current) {
+                revealActivePanelPath();
+            }
             return;
         }
         if (e.button !== 0) return;
@@ -1159,6 +1177,7 @@ export const PieMenu: React.FC = () => {
         clientY: number,
         currentTarget: EventTarget | null,
     ) => {
+        if (isPreferencesOpenRef.current) return;
         if (isEditorOpenRef.current) return;
         const now = Date.now();
         if (now - lastEditorOpenMsRef.current < 280) return;
@@ -1256,6 +1275,7 @@ export const PieMenu: React.FC = () => {
     };
 
     const handleOpenEditor = (index: number, childIdx: number | null = null, grandchildIdx: number | null = null) => {
+        if (isPreferencesOpenRef.current) return;
         setEditingIndex(index);
         setEditingChildIndex(childIdx);
         setEditingGrandchildIndex(grandchildIdx);
@@ -1368,7 +1388,7 @@ export const PieMenu: React.FC = () => {
 
     return (
         <div
-            className={`pie-menu-container ${isVisible ? 'visible' : ''} ${animClass}${isDragging ? ' dragging' : ''}`}
+            className={`pie-menu-container ${isVisible ? 'visible' : ''} ${animClass}${isDragging ? ' dragging' : ''}${prefsOpen ? ' prefs-marking-test' : ''}`}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
@@ -1376,6 +1396,12 @@ export const PieMenu: React.FC = () => {
             onContextMenu={handleContextMenu}
             style={customStyles}
         >
+            {prefsOpen && (
+                <div className="pie-prefs-test-badge" aria-hidden="true">
+                    {isDragging ? 'Marking test…' : 'Marking test — preview only'}
+                </div>
+            )}
+
             <svg className="pie-svg" viewBox={`0 0 ${size} ${size}`}>
                 <defs>
                     <filter id="glass-blur">
@@ -1784,6 +1810,7 @@ export const PieMenu: React.FC = () => {
                     <div className="gesture-debug-hud-hint">
                         child {debugHud.childSwitchable ? 'SWITCH (inner half)' : 'PATH→grand (outer half)'}
                         {' · '}split@{Math.round(th.childSplitRatio * 100)}%
+                        {prefsOpen ? ' · preview only' : ''}
                         {gestureCapture ? ' · capture→console/localStorage' : ''}
                         {debugHud.autoN !== undefined ? ` · auto ${debugHud.autoN} turn ${debugHud.spiralTurn ?? 0}` : ''}
                     </div>
