@@ -49,6 +49,7 @@ export interface AppearanceConfig {
     prefs_text?: string;
     prefs_chrome?: 'normal' | 'glass' | string;
     center_label?: string;
+    marking_trail_color?: string;
 }
 
 type GestureZone = 'dead' | 'parent' | 'switch' | 'freeze' | 'grand' | 'retrace';
@@ -611,8 +612,14 @@ export const PieMenu: React.FC = () => {
             ctx.clearRect(0, 0, size, size);
             return;
         }
-        drawMarkingTrail(ctx, markingTrail, size);
-    }, [markingTrail, showMarkingTrail, size]);
+        drawMarkingTrail(
+            ctx,
+            markingTrail,
+            size,
+            undefined,
+            configFull?.appearance?.marking_trail_color ?? '#ffffff',
+        );
+    }, [markingTrail, showMarkingTrail, size, configFull?.appearance?.marking_trail_color]);
 
     const pushMarkingTrail = (x: number, y: number) => {
         const next = pushMarkingTrailPoint(markingTrailRef.current, x, y);

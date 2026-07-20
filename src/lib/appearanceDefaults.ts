@@ -29,6 +29,7 @@ export const DEFAULT_APPEARANCE: AppearanceConfig = {
     prefs_text: '#ffffff',
     prefs_chrome: 'normal',
     center_label: 'HUE',
+    marking_trail_color: '#ffffff',
 };
 
 export type AppearancePreviewPayload = AppearanceConfig & {
@@ -55,6 +56,26 @@ export const THEME_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [
     'gesture_path_pick_ratio',
     'gesture_retrace_child_ratio',
     'gesture_grand_hybrid_extra_ratio',
+    'marking_trail_color',
+];
+
+export const WINDOW_THEME_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [
+    'prefs_bg',
+    'prefs_accent',
+    'prefs_text',
+    'prefs_chrome',
+];
+
+export const PANEL_COLOR_TEXT_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [
+    'panel_color',
+    'text_color',
+    'text_size',
+    'sub_panel_text_color',
+    'sub_panel_text_size',
+];
+
+export const TRAIL_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [
+    'marking_trail_color',
 ];
 
 export const OPACITY_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [

@@ -15,8 +15,10 @@ import {
     DEFAULT_APPEARANCE,
     GESTURE_HIT_ZONE_DEFAULT_KEYS,
     OPACITY_DEFAULT_KEYS,
+    PANEL_COLOR_TEXT_DEFAULT_KEYS,
     RING_SIZE_DEFAULT_KEYS,
-    THEME_DEFAULT_KEYS,
+    TRAIL_DEFAULT_KEYS,
+    WINDOW_THEME_DEFAULT_KEYS,
     pickAppearanceDefaults,
     type AppearancePreviewPayload,
 } from '../lib/appearanceDefaults';
@@ -244,6 +246,7 @@ interface PreferencesProps {
 
 export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSaved }) => {
     const [activeTab, setActiveTab] = useState<'general' | 'theme' | 'opacity' | 'animations' | 'auto' | 'advanced'>('general');
+    const [themeSubTab, setThemeSubTab] = useState<'window' | 'panel' | 'trail'>('panel');
     const [shortcut, setShortcut] = useState(config.global_shortcut || 'alt+space');
     const [menuItems, setMenuItems] = useState<SliceItem[]>(() => cloneItems(config.items || []));
     const [autoDirty, setAutoDirty] = useState(false);
@@ -287,6 +290,9 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         () => normalizePrefsChrome(config.appearance?.prefs_chrome),
     );
     const [centerLabel, setCenterLabel] = useState(config.appearance?.center_label ?? DEFAULT_APPEARANCE.center_label!);
+    const [markingTrailColor, setMarkingTrailColor] = useState(
+        config.appearance?.marking_trail_color ?? DEFAULT_APPEARANCE.marking_trail_color!,
+    );
 
     const [isRecording, setIsRecording] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -339,6 +345,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         prefs_text: prefsText,
         prefs_chrome: prefsChrome,
         center_label: centerLabel,
+        marking_trail_color: markingTrailColor,
     });
 
     const emitPreview = (extra?: Partial<AppearancePreviewPayload>) => {
@@ -382,6 +389,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         if (d.prefs_text !== undefined) setPrefsText(d.prefs_text);
         if (d.prefs_chrome !== undefined) setPrefsChrome(normalizePrefsChrome(d.prefs_chrome));
         if (d.center_label !== undefined) setCenterLabel(d.center_label);
+        if (d.marking_trail_color !== undefined) setMarkingTrailColor(d.marking_trail_color);
         window.setTimeout(() => emitPreview(extra), 0);
     };
 
@@ -411,7 +419,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         ringSpanScale, parentRingWeight, childRingWeight, grandRingWeight,
         childSplitRatio, pathPickRatio, retraceChildRatio, grandHybridExtraRatio,
         prefsBg, prefsAccent, prefsText, prefsChrome,
-        centerLabel,
+        centerLabel, markingTrailColor,
         activeTab,
     ]);
 
@@ -757,11 +765,64 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
 
                 {activeTab === 'theme' && (
                     <>
+                        <div className="pref-theme-tabs">
+                            <button
+                                type="button"
+                                className={themeSubTab === 'window' ? 'active' : ''}
+                                onClick={() => setThemeSubTab('window')}
+                            >
+                                Window
+                            </button>
+                            <button
+                                type="button"
+                                className={themeSubTab === 'panel' ? 'active' : ''}
+                                onClick={() => setThemeSubTab('panel')}
+                            >
+                                Panel
+                            </button>
+                            <button
+                                type="button"
+                                className={themeSubTab === 'trail' ? 'active' : ''}
+                                onClick={() => setThemeSubTab('trail')}
+                            >
+                                Trail
+                            </button>
+                        </div>
+
+                        {themeSubTab === 'window' && (
+                            <>
+                                <div className="pref-tab-toolbar">
+                                    <span className="pref-tab-toolbar-title">Preferences window</span>
+                                    <PrefTabReset onReset={() => applyDefaults(WINDOW_THEME_DEFAULT_KEYS)} />
+                                </div>
+                                <div className="pref-row">
+                                    <label>Background</label>
+                                    <input type="color" value={prefsBg} onChange={(e) => setPrefsBg(e.target.value)} />
+                                </div>
+                                <div className="pref-row">
+                                    <label>Accent</label>
+                                    <input type="color" value={prefsAccent} onChange={(e) => setPrefsAccent(e.target.value)} />
+                                </div>
+                                <div className="pref-row">
+                                    <label>Text</label>
+                                    <input type="color" value={prefsText} onChange={(e) => setPrefsText(e.target.value)} />
+                                </div>
+                                <div className="pref-row">
+                                    <label>Chrome style</label>
+                                    <PrefSelect
+                                        value={prefsChrome}
+                                        options={PREFS_CHROME_OPTIONS}
+                                        onChange={setPrefsChrome}
+                                    />
+                                </div>
+                            </>
+                        )}
+
+                        {themeSubTab === 'panel' && (
+                            <>
                         <div className="pref-tab-toolbar">
                             <span className="pref-tab-toolbar-title">Pie &amp; text</span>
-                            <PrefTabReset onReset={() => applyDefaults(THEME_DEFAULT_KEYS.filter(k =>
-                                !['prefs_bg', 'prefs_accent', 'prefs_text', 'prefs_chrome', 'center_label', 'ring_span_scale', 'parent_ring_weight', 'child_ring_weight', 'grand_ring_weight', 'gesture_child_split_ratio', 'gesture_path_pick_ratio', 'gesture_retrace_child_ratio', 'gesture_grand_hybrid_extra_ratio'].includes(k)
-                            ))} />
+                            <PrefTabReset onReset={() => applyDefaults(PANEL_COLOR_TEXT_DEFAULT_KEYS)} />
                         </div>
                         <div className="pref-row">
                             <label>Panel Color</label>
@@ -969,31 +1030,28 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 placeholder="HUE"
                             />
                         </div>
+                            </>
+                        )}
 
-                        <div className="pref-tab-toolbar" style={{ marginTop: '16px' }}>
-                            <span className="pref-tab-toolbar-title">Preferences window</span>
-                            <PrefTabReset onReset={() => applyDefaults(['prefs_bg', 'prefs_accent', 'prefs_text', 'prefs_chrome'])} />
-                        </div>
-                        <div className="pref-row">
-                            <label>Background</label>
-                            <input type="color" value={prefsBg} onChange={(e) => setPrefsBg(e.target.value)} />
-                        </div>
-                        <div className="pref-row">
-                            <label>Accent</label>
-                            <input type="color" value={prefsAccent} onChange={(e) => setPrefsAccent(e.target.value)} />
-                        </div>
-                        <div className="pref-row">
-                            <label>Text</label>
-                            <input type="color" value={prefsText} onChange={(e) => setPrefsText(e.target.value)} />
-                        </div>
-                        <div className="pref-row">
-                            <label>Chrome style</label>
-                            <PrefSelect
-                                value={prefsChrome}
-                                options={PREFS_CHROME_OPTIONS}
-                                onChange={setPrefsChrome}
-                            />
-                        </div>
+                        {themeSubTab === 'trail' && (
+                            <>
+                                <div className="pref-tab-toolbar">
+                                    <span className="pref-tab-toolbar-title">Marking trail</span>
+                                    <PrefTabReset onReset={() => applyDefaults(TRAIL_DEFAULT_KEYS)} />
+                                </div>
+                                <div className="pref-row">
+                                    <label>Trail color</label>
+                                    <input
+                                        type="color"
+                                        value={markingTrailColor}
+                                        onChange={(e) => setMarkingTrailColor(e.target.value)}
+                                    />
+                                </div>
+                                <small className="pref-hint">
+                                    Shown while dragging on the pie menu. Drag on the preview ring to try your color.
+                                </small>
+                            </>
+                        )}
                     </>
                 )}
 

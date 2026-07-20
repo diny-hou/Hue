@@ -86,12 +86,32 @@ function fadeAt(behind: number, fadeLen: number): number {
     return 1 - t * t;
 }
 
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+    const h = hex.replace(/^#/, '');
+    if (h.length === 3) {
+        return {
+            r: parseInt(h[0] + h[0], 16),
+            g: parseInt(h[1] + h[1], 16),
+            b: parseInt(h[2] + h[2], 16),
+        };
+    }
+    if (h.length >= 6) {
+        return {
+            r: parseInt(h.slice(0, 2), 16),
+            g: parseInt(h.slice(2, 4), 16),
+            b: parseInt(h.slice(4, 6), 16),
+        };
+    }
+    return { r: 255, g: 255, b: 255 };
+}
+
 /** Subtle marking trail — single hairline, distance fade, no glow. */
 export function drawMarkingTrail(
     ctx: CanvasRenderingContext2D,
     points: MarkingTrailPoint[],
     size: number,
     fadeLen = MARKING_TRAIL_FADE_PX,
+    trailColor = '#ffffff',
 ): void {
     ctx.clearRect(0, 0, size, size);
     if (points.length < 2) return;
@@ -100,6 +120,7 @@ export function drawMarkingTrail(
     if (smooth.length < 2) return;
 
     const headArc = smooth[smooth.length - 1].arc;
+    const { r, g, b } = hexToRgb(trailColor);
 
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -114,7 +135,7 @@ export function drawMarkingTrail(
         ctx.beginPath();
         ctx.moveTo(prev.x, prev.y);
         ctx.lineTo(curr.x, curr.y);
-        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.22})`;
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.22})`;
         ctx.lineWidth = 1.5;
         ctx.stroke();
     }

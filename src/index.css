@@ -1129,6 +1129,40 @@ body {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
+.pref-theme-tabs {
+  display: flex;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+
+.pref-theme-tabs button {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 7px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: center;
+}
+
+.pref-theme-tabs button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.pref-theme-tabs button.active {
+  color: white;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
 .pref-tab-toolbar {
   display: flex;
   align-items: center;

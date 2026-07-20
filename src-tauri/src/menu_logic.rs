@@ -73,6 +73,8 @@ pub struct AppearanceConfig {
     pub prefs_chrome: String,
     #[serde(default = "default_center_label")]
     pub center_label: String,
+    #[serde(default = "default_marking_trail_color")]
+    pub marking_trail_color: String,
     /// Legacy px ring depths (migrated to weights in the UI layer).
     #[serde(default = "default_parent_ring_thickness")]
     pub parent_ring_thickness: f32,
@@ -183,6 +185,10 @@ fn default_center_label() -> String {
     "HUE".to_string()
 }
 
+fn default_marking_trail_color() -> String {
+    "#ffffff".to_string()
+}
+
 fn default_parent_ring_thickness() -> f32 {
     110.0
 }
@@ -231,6 +237,7 @@ impl Default for AppearanceConfig {
             prefs_text: default_prefs_text(),
             prefs_chrome: default_prefs_chrome(),
             center_label: default_center_label(),
+            marking_trail_color: default_marking_trail_color(),
             parent_ring_thickness: default_parent_ring_thickness(),
             child_ring_thickness: default_child_ring_thickness(),
             grand_ring_thickness: default_grand_ring_thickness(),
