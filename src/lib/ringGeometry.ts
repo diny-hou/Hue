@@ -102,13 +102,18 @@ export function resolveRingGeometry(appearance?: AppearanceConfig | null): RingG
 
 function ratioInChildRing(appearance: AppearanceConfig | null | undefined, rings: RingGeometry): number {
     if (appearance?.gesture_child_split_ratio != null) {
-        return clampRatio(appearance.gesture_child_split_ratio);
+        return clampChildSplitRatio(appearance.gesture_child_split_ratio);
     }
     const legacy = appearance?.gesture_child_switch_max;
     if (legacy != null && rings.childThickness > 0) {
-        return clampRatio((legacy - rings.childInnerRadius) / rings.childThickness);
+        return clampChildSplitRatio((legacy - rings.childInnerRadius) / rings.childThickness);
     }
     return 0.5;
+}
+
+/** Inner/outer child-band split — UI allows 20–80% of child ring depth. */
+function clampChildSplitRatio(v: number): number {
+    return Math.min(0.8, Math.max(0.2, v));
 }
 
 function ratioInParentRing(

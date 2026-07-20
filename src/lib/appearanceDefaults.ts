@@ -65,6 +65,20 @@ export const OPACITY_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [
     'drag_opacity',
 ];
 
+export const RING_SIZE_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [
+    'ring_span_scale',
+    'parent_ring_weight',
+    'child_ring_weight',
+    'grand_ring_weight',
+];
+
+export const GESTURE_HIT_ZONE_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [
+    'gesture_child_split_ratio',
+    'gesture_path_pick_ratio',
+    'gesture_retrace_child_ratio',
+    'gesture_grand_hybrid_extra_ratio',
+];
+
 export const ANIMATION_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [
     'animation_type',
     'hover_scale',

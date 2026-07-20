@@ -13,7 +13,9 @@ import {
     ADVANCED_GESTURE_DEFAULT_KEYS,
     ANIMATION_DEFAULT_KEYS,
     DEFAULT_APPEARANCE,
+    GESTURE_HIT_ZONE_DEFAULT_KEYS,
     OPACITY_DEFAULT_KEYS,
+    RING_SIZE_DEFAULT_KEYS,
     THEME_DEFAULT_KEYS,
     pickAppearanceDefaults,
     type AppearancePreviewPayload,
@@ -811,17 +813,8 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         </div>
 
                         <div className="pref-tab-toolbar" style={{ marginTop: '16px' }}>
-                            <span className="pref-tab-toolbar-title">Ring size &amp; gestures</span>
-                            <PrefTabReset onReset={() => applyDefaults([
-                                'ring_span_scale',
-                                'parent_ring_weight',
-                                'child_ring_weight',
-                                'grand_ring_weight',
-                                'gesture_child_split_ratio',
-                                'gesture_path_pick_ratio',
-                                'gesture_retrace_child_ratio',
-                                'gesture_grand_hybrid_extra_ratio',
-                            ])} />
+                            <span className="pref-tab-toolbar-title">Ring size</span>
+                            <PrefTabReset onReset={() => applyDefaults(RING_SIZE_DEFAULT_KEYS)} />
                         </div>
                         <div className="pref-row">
                             <label>Overall size</label>
@@ -883,13 +876,21 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 <span className="pref-value-numeric">{ringPercents.grand}%</span>
                             </div>
                         </div>
+                        <small className="pref-hint">
+                            Radial thickness of each ring band. Percentages show each ring&apos;s share of the total band.
+                        </small>
+
+                        <div className="pref-tab-toolbar" style={{ marginTop: '16px' }}>
+                            <span className="pref-tab-toolbar-title">Hit zone lines</span>
+                            <PrefTabReset onReset={() => applyDefaults(GESTURE_HIT_ZONE_DEFAULT_KEYS)} />
+                        </div>
                         <div className="pref-row">
                             <label>Child half split</label>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
                                 <input
                                     type="range"
-                                    min="35"
-                                    max="65"
+                                    min="20"
+                                    max="80"
                                     step="1"
                                     style={{ flex: 1 }}
                                     value={Math.round(childSplitRatio * 100)}
@@ -944,7 +945,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                             </div>
                         </div>
                         <small className="pref-hint">
-                            Ring depth and gesture hit zones scale together. Percentages are shares of each ring band — half split is within the child ring; path pick and retrace are within the parent ring. Grand enter follows the child outer edge automatically.
+                            Judgment lines scale with ring size. Half split is a depth within the child ring (20–80%). Path pick and retrace are depths within the parent ring. Grand enter follows the child outer edge automatically.
                         </small>
 
                         <div className="pref-tab-toolbar" style={{ marginTop: '16px' }}>
