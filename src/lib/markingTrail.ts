@@ -1,5 +1,5 @@
 /** Path length (px) behind the cursor before the trail fully fades out. */
-export const MARKING_TRAIL_FADE_PX = 220;
+export const MARKING_TRAIL_FADE_PX = 140;
 
 export type MarkingTrailPoint = { x: number; y: number; arc: number };
 
@@ -71,7 +71,7 @@ export function pushMarkingTrailPoint(
         arc += Math.sqrt(distSq);
     }
     const next = [...trail, { x, y, arc }];
-    const cutoff = arc - MARKING_TRAIL_FADE_PX - 32;
+    const cutoff = arc - MARKING_TRAIL_FADE_PX - 24;
     let start = 0;
     while (start < next.length - 2 && next[start].arc < cutoff) {
         start += 1;
@@ -83,11 +83,10 @@ function fadeAt(behind: number, fadeLen: number): number {
     if (behind <= 0) return 1;
     if (behind >= fadeLen) return 0;
     const t = behind / fadeLen;
-    // Smoothstep-ish tail — soft dissolve, no hard cutoff
-    return (1 - t) * (1 - t) * (3 - 2 * (1 - t));
+    return 1 - t * t;
 }
 
-/** Paint a smooth comet trail onto a square canvas matching the pie viewBox. */
+/** Subtle marking trail — single hairline, distance fade, no glow. */
 export function drawMarkingTrail(
     ctx: CanvasRenderingContext2D,
     points: MarkingTrailPoint[],
@@ -97,7 +96,7 @@ export function drawMarkingTrail(
     ctx.clearRect(0, 0, size, size);
     if (points.length < 2) return;
 
-    const smooth = densifySmoothTrail(points, 2.5);
+    const smooth = densifySmoothTrail(points, 3);
     if (smooth.length < 2) return;
 
     const headArc = smooth[smooth.length - 1].arc;
@@ -105,71 +104,18 @@ export function drawMarkingTrail(
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // Wide soft bloom (additive)
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.filter = 'blur(5px)';
     for (let i = 1; i < smooth.length; i++) {
         const prev = smooth[i - 1];
         const curr = smooth[i];
         const behind = headArc - curr.arc;
         const alpha = fadeAt(behind, fadeLen);
-        if (alpha < 0.02) continue;
+        if (alpha < 0.03) continue;
 
         ctx.beginPath();
         ctx.moveTo(prev.x, prev.y);
         ctx.lineTo(curr.x, curr.y);
-        ctx.strokeStyle = `rgba(139, 92, 246, ${alpha * 0.42})`;
-        ctx.lineWidth = 6 + alpha * 14;
+        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.22})`;
+        ctx.lineWidth = 1.5;
         ctx.stroke();
     }
-    ctx.restore();
-
-    // Mid violet sheen
-    for (let i = 1; i < smooth.length; i++) {
-        const prev = smooth[i - 1];
-        const curr = smooth[i];
-        const behind = headArc - curr.arc;
-        const alpha = fadeAt(behind, fadeLen);
-        if (alpha < 0.02) continue;
-
-        ctx.beginPath();
-        ctx.moveTo(prev.x, prev.y);
-        ctx.lineTo(curr.x, curr.y);
-        ctx.strokeStyle = `rgba(196, 181, 253, ${alpha * 0.5})`;
-        ctx.lineWidth = 2 + alpha * 4;
-        ctx.stroke();
-    }
-
-    // Bright core — thins toward tail
-    for (let i = 1; i < smooth.length; i++) {
-        const prev = smooth[i - 1];
-        const curr = smooth[i];
-        const behind = headArc - curr.arc;
-        const alpha = fadeAt(behind, fadeLen);
-        if (alpha < 0.02) continue;
-
-        ctx.beginPath();
-        ctx.moveTo(prev.x, prev.y);
-        ctx.lineTo(curr.x, curr.y);
-        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.72})`;
-        ctx.lineWidth = 0.8 + alpha * 2.2;
-        ctx.stroke();
-    }
-
-    const head = points[points.length - 1];
-    const glow = ctx.createRadialGradient(head.x, head.y, 0, head.x, head.y, 18);
-    glow.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
-    glow.addColorStop(0.25, 'rgba(216, 180, 254, 0.45)');
-    glow.addColorStop(0.55, 'rgba(139, 92, 246, 0.12)');
-    glow.addColorStop(1, 'rgba(139, 92, 246, 0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(head.x, head.y, 18, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
-    ctx.beginPath();
-    ctx.arc(head.x, head.y, 3, 0, Math.PI * 2);
-    ctx.fill();
 }
