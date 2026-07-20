@@ -4,11 +4,35 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isEnabled, enable, disable } from '@tauri-apps/plugin-autostart';
-import { ArrowDown, ArrowUp, FolderOpen } from 'lucide-react';
+import { ArrowDown, ArrowUp, FolderOpen, ImageIcon, Trash2 } from 'lucide-react';
 import { AppearanceConfig, MenuConfig } from './PieMenu';
 import { SliceItem } from './SliceEditor';
 import { UpdateDialog } from './UpdateDialog';
 import { useAppUpdater } from '../hooks/useAppUpdater';
+import {
+    ADVANCED_GESTURE_DEFAULT_KEYS,
+    ANIMATION_DEFAULT_KEYS,
+    DEFAULT_APPEARANCE,
+    OPACITY_DEFAULT_KEYS,
+    THEME_DEFAULT_KEYS,
+    pickAppearanceDefaults,
+    type AppearancePreviewPayload,
+} from '../lib/appearanceDefaults';
+import {
+    HOVER_ANIMATION_OPTIONS,
+    HOVER_SCALE_OPTIONS,
+    OPEN_ANIMATION_OPTIONS,
+    PREFS_CHROME_OPTIONS,
+    PrefSelect,
+} from './PrefSelect';
+
+function PrefTabReset({ onReset }: { onReset: () => void }) {
+    return (
+        <button type="button" className="pref-tab-reset" onClick={onReset}>
+            Reset to defaults
+        </button>
+    );
+}
 
 type AutoDepth = 'parent' | 'child' | 'grand';
 
@@ -248,6 +272,17 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     const [grandEnterHybrid, setGrandEnterHybrid] = useState(config.appearance?.gesture_grand_enter_hybrid ?? 320);
     const [retraceGrand, setRetraceGrand] = useState(config.appearance?.gesture_retrace_grand ?? 180);
     const [retraceChild, setRetraceChild] = useState(config.appearance?.gesture_retrace_child ?? 140);
+    const [prefsBg, setPrefsBg] = useState(config.appearance?.prefs_bg ?? DEFAULT_APPEARANCE.prefs_bg!);
+    const [prefsAccent, setPrefsAccent] = useState(config.appearance?.prefs_accent ?? DEFAULT_APPEARANCE.prefs_accent!);
+    const [prefsText, setPrefsText] = useState(config.appearance?.prefs_text ?? DEFAULT_APPEARANCE.prefs_text!);
+    const [prefsChrome, setPrefsChrome] = useState(config.appearance?.prefs_chrome ?? DEFAULT_APPEARANCE.prefs_chrome!);
+    const [centerLabel, setCenterLabel] = useState(config.appearance?.center_label ?? DEFAULT_APPEARANCE.center_label!);
+    const [centerLogo, setCenterLogo] = useState(config.appearance?.center_logo ?? '');
+    const [panelOverlay, setPanelOverlay] = useState(config.appearance?.panel_overlay ?? '');
+    const [panelOverlayOpacity, setPanelOverlayOpacity] = useState(
+        config.appearance?.panel_overlay_opacity ?? DEFAULT_APPEARANCE.panel_overlay_opacity!,
+    );
+    const [imageBusy, setImageBusy] = useState(false);
 
     const [isRecording, setIsRecording] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -257,6 +292,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     const [tauriVersion, setTauriVersion] = useState('…');
     const updater = useAppUpdater();
     const previewReadyRef = useRef(false);
+    const replayAnimRef = useRef(false);
 
     const buildAppearance = (): AppearanceConfig => ({
         panel_opacity: opacity,
@@ -279,7 +315,94 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         gesture_grand_enter_hybrid: grandEnterHybrid,
         gesture_retrace_grand: retraceGrand,
         gesture_retrace_child: retraceChild,
+        prefs_bg: prefsBg,
+        prefs_accent: prefsAccent,
+        prefs_text: prefsText,
+        prefs_chrome: prefsChrome,
+        center_label: centerLabel,
+        center_logo: centerLogo,
+        panel_overlay: panelOverlay,
+        panel_overlay_opacity: panelOverlayOpacity,
     });
+
+    const emitPreview = (extra?: Partial<AppearancePreviewPayload>) => {
+        const payload: AppearancePreviewPayload = {
+            ...buildAppearance(),
+            previewTab: activeTab,
+            replayOpenAnimation: replayAnimRef.current || extra?.replayOpenAnimation,
+            ...extra,
+        };
+        replayAnimRef.current = false;
+        void emit('appearance-preview', payload);
+    };
+
+    const applyDefaults = (keys: (keyof AppearanceConfig)[], extra?: Partial<AppearancePreviewPayload>) => {
+        const d = pickAppearanceDefaults(keys);
+        if (d.panel_opacity !== undefined) setOpacity(d.panel_opacity);
+        if (d.hover_opacity !== undefined) setHoverOpacity(d.hover_opacity);
+        if (d.sub_panel_opacity !== undefined) setSubPanelOpacity(d.sub_panel_opacity);
+        if (d.sub_panel_hover_opacity !== undefined) setSubPanelHoverOpacity(d.sub_panel_hover_opacity);
+        if (d.drag_opacity !== undefined) setDragOpacity(d.drag_opacity);
+        if (d.panel_color !== undefined) setPanelColor(d.panel_color);
+        if (d.text_size !== undefined) setTextSize(d.text_size);
+        if (d.text_color !== undefined) setTextColor(d.text_color);
+        if (d.sub_panel_text_size !== undefined) setSubPanelTextSize(d.sub_panel_text_size);
+        if (d.sub_panel_text_color !== undefined) setSubPanelTextColor(d.sub_panel_text_color);
+        if (d.animation_type !== undefined) setAnimType(d.animation_type);
+        if (d.hover_scale !== undefined) setHoverScale(d.hover_scale);
+        if (d.hover_animation !== undefined) setHoverAnim(d.hover_animation);
+        if (d.gesture_path_debug !== undefined) setGesturePathDebug(d.gesture_path_debug);
+        if (d.gesture_path_capture !== undefined) setGesturePathCapture(d.gesture_path_capture);
+        if (d.gesture_child_switch_max !== undefined) setChildSwitchMax(d.gesture_child_switch_max);
+        if (d.gesture_grand_enter !== undefined) setGrandEnter(d.gesture_grand_enter);
+        if (d.gesture_grand_enter_hybrid !== undefined) setGrandEnterHybrid(d.gesture_grand_enter_hybrid);
+        if (d.gesture_retrace_grand !== undefined) setRetraceGrand(d.gesture_retrace_grand);
+        if (d.gesture_retrace_child !== undefined) setRetraceChild(d.gesture_retrace_child);
+        if (d.prefs_bg !== undefined) setPrefsBg(d.prefs_bg);
+        if (d.prefs_accent !== undefined) setPrefsAccent(d.prefs_accent);
+        if (d.prefs_text !== undefined) setPrefsText(d.prefs_text);
+        if (d.prefs_chrome !== undefined) setPrefsChrome(d.prefs_chrome);
+        if (d.center_label !== undefined) setCenterLabel(d.center_label);
+        if (d.center_logo !== undefined) setCenterLogo(d.center_logo);
+        if (d.panel_overlay !== undefined) setPanelOverlay(d.panel_overlay);
+        if (d.panel_overlay_opacity !== undefined) setPanelOverlayOpacity(d.panel_overlay_opacity);
+        window.setTimeout(() => emitPreview(extra), 0);
+    };
+
+    const resetAllAppearance = () => {
+        if (!window.confirm('Reset all appearance settings to defaults? Shortcut and menu items are kept until you Apply.')) {
+            return;
+        }
+        applyDefaults(Object.keys(DEFAULT_APPEARANCE) as (keyof AppearanceConfig)[], { replayOpenAnimation: true });
+    };
+
+    const importAppearanceImage = async (kind: 'center_logo' | 'panel_overlay') => {
+        setImageBusy(true);
+        try {
+            await invoke('set_native_dialog_open', { open: true });
+            const picked = await invoke<string | null>('pick_file');
+            if (!picked) return;
+            const rel = await invoke<string>('import_appearance_image', { kind, sourcePath: picked });
+            if (kind === 'center_logo') setCenterLogo(rel);
+            else setPanelOverlay(rel);
+        } catch (e) {
+            console.error('[Preferences] import image failed:', e);
+            alert(`Failed to import image: ${e}`);
+        } finally {
+            await invoke('set_native_dialog_open', { open: false }).catch(() => {});
+            setImageBusy(false);
+        }
+    };
+
+    const clearAppearanceImage = async (kind: 'center_logo' | 'panel_overlay') => {
+        try {
+            await invoke('clear_appearance_image', { kind });
+            if (kind === 'center_logo') setCenterLogo('');
+            else setPanelOverlay('');
+        } catch (e) {
+            console.error('[Preferences] clear image failed:', e);
+        }
+    };
 
     // Live-preview appearance (esp. threshold rings) on the main pie while Preferences is open
     useEffect(() => {
@@ -288,7 +411,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
             return;
         }
         const timer = window.setTimeout(() => {
-            void emit('appearance-preview', buildAppearance());
+            emitPreview();
         }, 40);
         return () => window.clearTimeout(timer);
         // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional live preview deps
@@ -298,6 +421,8 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         animType, hoverScale, hoverAnim,
         gesturePathDebug, gesturePathCapture,
         childSwitchMax, grandEnter, grandEnterHybrid, retraceGrand, retraceChild,
+        prefsBg, prefsAccent, prefsText, prefsChrome,
+        centerLabel, centerLogo, panelOverlay, panelOverlayOpacity,
         activeTab,
     ]);
 
@@ -511,7 +636,13 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     return (
         <div className="preferences-shell">
             <div
-                className="preferences-modal"
+                className={`preferences-modal${prefsChrome === 'liquid_glass' ? ' preferences-modal--liquid-glass' : ''}`}
+                style={{
+                    ['--prefs-bg' as string]: prefsBg,
+                    ['--prefs-accent' as string]: prefsAccent,
+                    ['--prefs-text' as string]: prefsText,
+                    color: prefsText,
+                }}
                 onContextMenu={e => e.preventDefault()}
             >
             <div
@@ -632,6 +763,12 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
 
                 {activeTab === 'theme' && (
                     <>
+                        <div className="pref-tab-toolbar">
+                            <span className="pref-tab-toolbar-title">Pie &amp; text</span>
+                            <PrefTabReset onReset={() => applyDefaults(THEME_DEFAULT_KEYS.filter(k =>
+                                !['prefs_bg', 'prefs_accent', 'prefs_text', 'prefs_chrome', 'center_label', 'center_logo', 'panel_overlay', 'panel_overlay_opacity'].includes(k)
+                            ))} />
+                        </div>
                         <div className="pref-row">
                             <label>Panel Color</label>
                             <input
@@ -662,8 +799,8 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 <span style={{ fontSize: '12px', minWidth: '3ch' }}>{textSize}px</span>
                             </div>
                         </div>
-                        <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
-                            <label style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>Sub / Nested Text</label>
+                        <div className="pref-row" style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '12px' }}>
+                            <label style={{ fontSize: '14px', fontWeight: 600 }}>Sub / Nested Text</label>
                         </div>
                         <div className="pref-row">
                             <label>Text Color</label>
@@ -687,11 +824,101 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 <span style={{ fontSize: '12px', minWidth: '3ch' }}>{subPanelTextSize}px</span>
                             </div>
                         </div>
+
+                        <div className="pref-tab-toolbar" style={{ marginTop: '16px' }}>
+                            <span className="pref-tab-toolbar-title">Center label &amp; logo</span>
+                        </div>
+                        <div className="pref-row">
+                            <label>Center label</label>
+                            <input
+                                className="pref-text-input"
+                                type="text"
+                                value={centerLabel}
+                                maxLength={24}
+                                onChange={(e) => setCenterLabel(e.target.value)}
+                                placeholder="HUE"
+                            />
+                        </div>
+                        <div className="pref-row pref-row-wrap">
+                            <label>Center logo</label>
+                            <div className="pref-image-actions">
+                                <button type="button" className="pref-image-btn" disabled={imageBusy} onClick={() => void importAppearanceImage('center_logo')}>
+                                    <ImageIcon size={14} /> Import
+                                </button>
+                                {centerLogo && (
+                                    <button type="button" className="pref-image-btn pref-image-btn-danger" disabled={imageBusy} onClick={() => void clearAppearanceImage('center_logo')}>
+                                        <Trash2 size={14} /> Remove
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        <small className="pref-hint">PNG/JPEG/WebP → saved once as 256×256 PNG. Logo appears above the label.</small>
+
+                        <div className="pref-tab-toolbar" style={{ marginTop: '16px' }}>
+                            <span className="pref-tab-toolbar-title">Panel overlay</span>
+                        </div>
+                        <div className="pref-row pref-row-wrap">
+                            <label>Overlay image</label>
+                            <div className="pref-image-actions">
+                                <button type="button" className="pref-image-btn" disabled={imageBusy} onClick={() => void importAppearanceImage('panel_overlay')}>
+                                    <ImageIcon size={14} /> Import
+                                </button>
+                                {panelOverlay && (
+                                    <button type="button" className="pref-image-btn pref-image-btn-danger" disabled={imageBusy} onClick={() => void clearAppearanceImage('panel_overlay')}>
+                                        <Trash2 size={14} /> Remove
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        <div className="pref-row">
+                            <label>Overlay opacity</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="0.6"
+                                    step="0.02"
+                                    style={{ flex: 1 }}
+                                    value={panelOverlayOpacity}
+                                    onChange={(e) => setPanelOverlayOpacity(parseFloat(e.target.value))}
+                                />
+                                <span style={{ fontSize: '12px', minWidth: '3ch' }}>{Math.round(panelOverlayOpacity * 100)}%</span>
+                            </div>
+                        </div>
+
+                        <div className="pref-tab-toolbar" style={{ marginTop: '16px' }}>
+                            <span className="pref-tab-toolbar-title">Preferences window</span>
+                            <PrefTabReset onReset={() => applyDefaults(['prefs_bg', 'prefs_accent', 'prefs_text', 'prefs_chrome'])} />
+                        </div>
+                        <div className="pref-row">
+                            <label>Background</label>
+                            <input type="color" value={prefsBg} onChange={(e) => setPrefsBg(e.target.value)} />
+                        </div>
+                        <div className="pref-row">
+                            <label>Accent</label>
+                            <input type="color" value={prefsAccent} onChange={(e) => setPrefsAccent(e.target.value)} />
+                        </div>
+                        <div className="pref-row">
+                            <label>Text</label>
+                            <input type="color" value={prefsText} onChange={(e) => setPrefsText(e.target.value)} />
+                        </div>
+                        <div className="pref-row">
+                            <label>Chrome style</label>
+                            <PrefSelect
+                                value={prefsChrome}
+                                options={PREFS_CHROME_OPTIONS}
+                                onChange={setPrefsChrome}
+                            />
+                        </div>
                     </>
                 )}
 
                 {activeTab === 'opacity' && (
                     <>
+                        <div className="pref-tab-toolbar">
+                            <span className="pref-tab-toolbar-title">Opacity</span>
+                            <PrefTabReset onReset={() => applyDefaults(OPACITY_DEFAULT_KEYS)} />
+                        </div>
                         <div className="pref-row">
                             <label>Panel Opacity (Main)</label>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -773,45 +1000,38 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
 
                 {activeTab === 'animations' && (
                     <>
+                        <div className="pref-tab-toolbar">
+                            <span className="pref-tab-toolbar-title">Animations</span>
+                            <PrefTabReset onReset={() => applyDefaults(ANIMATION_DEFAULT_KEYS, { replayOpenAnimation: true })} />
+                        </div>
                         <div className="pref-row">
                             <label>Open Animation</label>
-                            <select
-                                className="pref-select"
+                            <PrefSelect
                                 value={animType}
-                                onChange={(e) => setAnimType(e.target.value)}
-                            >
-                                <option value="none">None (Instant)</option>
-                                <option value="spread">Spread</option>
-                                <option value="fade">Fade</option>
-                                <option value="bounce">Bounce</option>
-                            </select>
+                                options={OPEN_ANIMATION_OPTIONS}
+                                onChange={(v) => {
+                                    replayAnimRef.current = true;
+                                    setAnimType(v);
+                                }}
+                            />
                         </div>
                         <div className="pref-row">
                             <label>Hover Scale</label>
-                            <select
-                                className="pref-select"
+                            <PrefSelect
                                 value={hoverScale}
-                                onChange={(e) => setHoverScale(e.target.value)}
-                            >
-                                <option value="none">None (1.0x)</option>
-                                <option value="small">Small (1.05x)</option>
-                                <option value="medium">Medium (1.10x)</option>
-                                <option value="large">Large (1.15x)</option>
-                            </select>
+                                options={HOVER_SCALE_OPTIONS}
+                                onChange={setHoverScale}
+                            />
                         </div>
                         <div className="pref-row">
                             <label>Hover Animation</label>
-                            <select
-                                className="pref-select"
+                            <PrefSelect
                                 value={hoverAnim}
-                                onChange={(e) => setHoverAnim(e.target.value)}
-                            >
-                                <option value="none">None</option>
-                                <option value="pulse">Pulse</option>
-                                <option value="glow">Glow</option>
-                                <option value="wobble">Wobble</option>
-                            </select>
+                                options={HOVER_ANIMATION_OPTIONS}
+                                onChange={setHoverAnim}
+                            />
                         </div>
+                        <small className="pref-hint">Open animation replays on the pie when you change it. Hover effects show on the demo slice.</small>
                     </>
                 )}
 
@@ -930,7 +1150,11 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                             <label>Tauri</label>
                             <span className="pref-value">v{tauriVersion}</span>
                         </div>
-                        <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
+                        <div className="pref-tab-toolbar" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px' }}>
+                            <span className="pref-tab-toolbar-title">Gesture thresholds</span>
+                            <PrefTabReset onReset={() => applyDefaults(ADVANCED_GESTURE_DEFAULT_KEYS)} />
+                        </div>
+                        <div className="pref-row">
                             <label>Gesture Path Debug</label>
                             <label className="toggle-switch">
                                 <input
@@ -970,6 +1194,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         <div className="pref-row" style={{ marginTop: '4px' }}>
                             <small style={{ color: '#aaa' }}>
                                 Live preview on the pie (rings + labels update as you drag).
+                                Theme, Opacity, and Animations tabs show parent / child / grand rings on the pie live.
                                 Apply to save. Close without Apply discards preview.
                                 Child half split: inner = switch child · outer = path→grand.
                             </small>
@@ -1043,12 +1268,17 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
             />
 
             <div className="preferences-footer">
-                <button className="pref-save" onClick={handleSave} disabled={saving || isRecording}>
-                    {saving ? 'Saving...' : 'Apply'}
+                <button type="button" className="pref-reset-all" onClick={resetAllAppearance} disabled={saving || isRecording}>
+                    Reset appearance
                 </button>
-                <button className="pref-cancel" onClick={onClose} disabled={saving}>
-                    Close
-                </button>
+                <div className="preferences-footer-actions">
+                    <button className="pref-save" onClick={handleSave} disabled={saving || isRecording}>
+                        {saving ? 'Saving...' : 'Apply'}
+                    </button>
+                    <button className="pref-cancel" onClick={onClose} disabled={saving}>
+                        Close
+                    </button>
+                </div>
             </div>
             </div>
         </div>

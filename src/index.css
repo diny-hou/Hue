@@ -20,11 +20,11 @@
 }
 
 html.hue-preferences-window {
-  background: #1c1f26 !important;
+  background: transparent !important;
 }
 
 html.hue-preferences-window body {
-  background: #1c1f26 !important;
+  background: transparent !important;
 }
 
 html.hue-preferences-window #root {
@@ -93,6 +93,71 @@ body {
 
 .pie-menu-container.anim-bounce.visible {
   animation: bounce 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.pie-menu-container.anim-spin.visible {
+  animation: animSpin 0.35s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.pie-menu-container.anim-pop.visible {
+  animation: animPop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.pie-menu-container.anim-rise.visible {
+  animation: animRise 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pie-menu-container.anim-blur_in.visible {
+  animation: animBlurIn 0.35s ease;
+}
+
+@keyframes animSpin {
+  from {
+    opacity: 0;
+    transform: scale(0.6) rotate(-18deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes animPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.75);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes animRise {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes animBlurIn {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+    filter: blur(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
 }
 
 @keyframes spread {
@@ -164,16 +229,13 @@ body {
 }
 
 /* Apply drag opacity to inactive slices when dragging */
-.pie-container.dragging .slice-path:not(:hover):not(.active) {
+.pie-menu-container.dragging .slice-path:not(:hover):not(.active) {
   opacity: var(--drag-opacity, 0.3);
   transition: opacity 0.2s ease;
 }
 
-/* Also apply drag opacity to outer slices when dragging and an inner slice is hovered */
-.pie-container.dragging .slice-group:has(.slice-path:hover)~.outer-ring .outer-slice,
-.pie-container.dragging .slice-group:has(.slice-path.active)~.outer-ring .outer-slice {
-  opacity: calc(var(--drag-opacity, 0.3) * 0.8);
-  transition: opacity 0.2s ease;
+.pie-menu-container.dragging .outer-slice:not(:hover):not(.active) {
+  opacity: calc(var(--drag-opacity, 0.3) * 0.85);
 }
 
 /* Sub-panel base opacity (different from inner) */
@@ -233,6 +295,48 @@ body {
 .slice-path.hover-anim-glow.active,
 .slice-path.hover-anim-glow:hover {
   filter: brightness(1.3) drop-shadow(0 0 12px var(--panel-color, rgba(255, 255, 255, 0.5)));
+}
+
+@keyframes animHoverBreathe {
+  0%, 100% { transform: scale(var(--hover-scale, 1.05)); }
+  50% { transform: scale(calc(var(--hover-scale, 1.05) + 0.04)); }
+}
+
+.slice-path.hover-anim-breathe.active,
+.slice-path.hover-anim-breathe:hover {
+  animation: animHoverBreathe 2s infinite ease-in-out;
+}
+
+@keyframes animHoverShimmer {
+  0%, 100% { filter: brightness(1.15); }
+  50% { filter: brightness(1.45); }
+}
+
+.slice-path.hover-anim-shimmer.active,
+.slice-path.hover-anim-shimmer:hover {
+  animation: animHoverShimmer 1.2s infinite ease-in-out;
+}
+
+@keyframes animHoverRipple {
+  0% { filter: drop-shadow(0 0 0 rgba(255,255,255,0)); }
+  70% { filter: drop-shadow(0 0 14px rgba(255,255,255,0.35)); }
+  100% { filter: drop-shadow(0 0 0 rgba(255,255,255,0)); }
+}
+
+.slice-path.hover-anim-ripple.active,
+.slice-path.hover-anim-ripple:hover {
+  animation: animHoverRipple 1.1s infinite ease-out;
+}
+
+.pie-panel-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background-size: cover;
+  background-position: center;
+  mix-blend-mode: soft-light;
+  z-index: 1;
 }
 
 
@@ -486,15 +590,31 @@ body {
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border-color);
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
+  gap: 4px;
   box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
+  z-index: 2;
+}
+
+.center-logo {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  border-radius: 8px;
+  pointer-events: none;
 }
 
 .center-text {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: bold;
   letter-spacing: 1px;
+  line-height: 1.1;
+  text-align: center;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ─── Slice Editor Popover ─────────────────────────────── */
@@ -856,15 +976,25 @@ body {
   overflow: hidden;
   box-sizing: border-box;
   pointer-events: auto;
-  background: #252830;
+  background: var(--prefs-bg, #252830);
   border: none;
   border-radius: 0;
   box-shadow: none;
   display: flex;
   flex-direction: column;
   padding: 16px;
-  color: white;
+  color: var(--prefs-text, #fff);
   z-index: 1000;
+}
+
+.preferences-modal--liquid-glass {
+  background: color-mix(in srgb, var(--prefs-bg, #252830) 72%, transparent);
+  backdrop-filter: blur(28px) saturate(1.35);
+  -webkit-backdrop-filter: blur(28px) saturate(1.35);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 12px 40px rgba(0, 0, 0, 0.35);
 }
 
 .preferences-header {
@@ -964,8 +1094,179 @@ body {
 
 .pref-tabs button.active {
   color: white;
-  background: var(--accent-color, #4a90e2);
+  background: var(--prefs-accent, var(--accent-color, #6366f1));
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.pref-tab-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pref-tab-toolbar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.pref-tab-reset {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.75);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.pref-tab-reset:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.pref-hint {
+  display: block;
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 2px 0 8px;
+}
+
+.pref-text-input {
+  flex: 1;
+  max-width: 180px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  padding: 6px 10px;
+  outline: none;
+}
+
+.pref-text-input:focus {
+  border-color: var(--prefs-accent, var(--accent-color));
+}
+
+.pref-row-wrap {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pref-image-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pref-image-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pref-image-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.pref-image-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pref-image-btn-danger {
+  border-color: rgba(255, 80, 80, 0.35);
+  color: #ffb4b4;
+}
+
+.pref-select-wrap {
+  position: relative;
+  min-width: 160px;
+}
+
+.pref-select-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.pref-select-wrap.open .pref-select-trigger,
+.pref-select-trigger:hover {
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.pref-select-wrap.open .pref-select-trigger {
+  border-color: var(--prefs-accent, var(--accent-color));
+}
+
+.pref-select-chevron {
+  opacity: 0.65;
+  font-size: 11px;
+}
+
+.pref-select-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: rgba(28, 30, 38, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.pref-select-option {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pref-select-option:hover,
+.pref-select-option.selected {
+  background: color-mix(in srgb, var(--prefs-accent, var(--accent-color)) 28%, transparent);
+  color: #fff;
+}
+
+.pref-select-wrap.disabled {
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .preferences-body {
@@ -1000,12 +1301,12 @@ body {
 
 .pref-row input[type="number"]:focus,
 .pref-row input[type="text"]:focus {
-  border-color: var(--accent-color);
+  border-color: var(--prefs-accent, var(--accent-color));
 }
 
 /* For range inputs to look a bit better */
 .pref-row input[type="range"] {
-  accent-color: var(--accent-color);
+  accent-color: var(--prefs-accent, var(--accent-color));
 }
 
 .pref-row input[type="color"] {
@@ -1100,11 +1401,37 @@ body {
 
 .preferences-footer {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
   margin-top: 16px;
   flex-shrink: 0;
   padding-top: 4px;
+}
+
+.preferences-footer-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.pref-reset-all {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.8);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pref-reset-all:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.pref-reset-all:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .pref-save,
@@ -1119,7 +1446,7 @@ body {
 }
 
 .pref-save {
-  background: var(--accent-color);
+  background: var(--prefs-accent, var(--accent-color));
   color: #fff;
 }
 

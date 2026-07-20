@@ -45,6 +45,24 @@ pub struct AppearanceConfig {
     /// On entry sector only: drop child when distance falls below this.
     #[serde(default = "default_gesture_retrace_child")]
     pub gesture_retrace_child: f32,
+    #[serde(default = "default_prefs_bg")]
+    pub prefs_bg: String,
+    #[serde(default = "default_prefs_accent")]
+    pub prefs_accent: String,
+    #[serde(default = "default_prefs_text")]
+    pub prefs_text: String,
+    /// "normal" | "liquid_glass"
+    #[serde(default = "default_prefs_chrome")]
+    pub prefs_chrome: String,
+    #[serde(default = "default_center_label")]
+    pub center_label: String,
+    /// Relative path under app config dir, e.g. "assets/center-logo.png"
+    #[serde(default)]
+    pub center_logo: String,
+    #[serde(default)]
+    pub panel_overlay: String,
+    #[serde(default = "default_panel_overlay_opacity")]
+    pub panel_overlay_opacity: f32,
 }
 
 fn default_hover_animation() -> String {
@@ -96,6 +114,30 @@ fn default_gesture_retrace_child() -> f32 {
     140.0
 }
 
+fn default_prefs_bg() -> String {
+    "#252830".to_string()
+}
+
+fn default_prefs_accent() -> String {
+    "#6366f1".to_string()
+}
+
+fn default_prefs_text() -> String {
+    "#ffffff".to_string()
+}
+
+fn default_prefs_chrome() -> String {
+    "normal".to_string()
+}
+
+fn default_center_label() -> String {
+    "HUE".to_string()
+}
+
+fn default_panel_overlay_opacity() -> f32 {
+    0.18
+}
+
 impl Default for AppearanceConfig {
     fn default() -> Self {
         Self {
@@ -119,6 +161,14 @@ impl Default for AppearanceConfig {
             gesture_grand_enter_hybrid: default_gesture_grand_enter_hybrid(),
             gesture_retrace_grand: default_gesture_retrace_grand(),
             gesture_retrace_child: default_gesture_retrace_child(),
+            prefs_bg: default_prefs_bg(),
+            prefs_accent: default_prefs_accent(),
+            prefs_text: default_prefs_text(),
+            prefs_chrome: default_prefs_chrome(),
+            center_label: default_center_label(),
+            center_logo: String::new(),
+            panel_overlay: String::new(),
+            panel_overlay_opacity: default_panel_overlay_opacity(),
         }
     }
 }
@@ -374,6 +424,31 @@ pub fn get_config_path(app_handle: &AppHandle) -> PathBuf {
         .app_config_dir()
         .unwrap_or_default()
         .join("preferences.json")
+}
+
+pub fn get_assets_dir(app_handle: &AppHandle) -> PathBuf {
+    app_handle
+        .path()
+        .app_config_dir()
+        .unwrap_or_default()
+        .join("assets")
+}
+
+pub fn resolve_asset_path(app_handle: &AppHandle, rel: &str) -> Option<PathBuf> {
+    let rel = rel.trim();
+    if rel.is_empty() {
+        return None;
+    }
+    let path = app_handle
+        .path()
+        .app_config_dir()
+        .ok()?
+        .join(rel);
+    if path.is_file() {
+        Some(path)
+    } else {
+        None
+    }
 }
 
 pub fn load_config(app_handle: &AppHandle) -> MenuConfig {

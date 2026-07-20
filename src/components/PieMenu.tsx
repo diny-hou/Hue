@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { SliceEditor, SliceItem } from './SliceEditor';
+import type { AppearancePreviewPayload } from '../lib/appearanceDefaults';
 
 export interface AppearanceConfig {
     panel_opacity: number;
@@ -27,6 +28,14 @@ export interface AppearanceConfig {
     gesture_retrace_grand?: number;
     /** On entry sector only — drop child below this radius. */
     gesture_retrace_child?: number;
+    prefs_bg?: string;
+    prefs_accent?: string;
+    prefs_text?: string;
+    prefs_chrome?: 'normal' | 'liquid_glass' | string;
+    center_label?: string;
+    center_logo?: string;
+    panel_overlay?: string;
+    panel_overlay_opacity?: number;
 }
 
 type GestureZone = 'dead' | 'parent' | 'switch' | 'freeze' | 'grand' | 'retrace';
@@ -187,6 +196,32 @@ function groupHasGrandRing(item: MenuItem | undefined): boolean {
     return item.children.some(isGroupItem);
 }
 
+/** Demo parent/child/grand indices for Preferences live preview. */
+function findDemoRingIndices(items: MenuItem[]): { main: number; child: number; grand: number } {
+    for (let mi = 0; mi < items.length; mi++) {
+        const main = items[mi];
+        if (!isGroupItem(main)) continue;
+        const children = main.children ?? [];
+        for (let ci = 0; ci < children.length; ci++) {
+            const child = children[ci];
+            if (!isGroupItem(child)) continue;
+            const grands = child.children ?? [];
+            for (let gi = 0; gi < grands.length; gi++) {
+                if (isFilledSlot(grands[gi])) {
+                    return { main: mi, child: ci, grand: gi };
+                }
+            }
+            if (isFilledSlot(child)) {
+                return { main: mi, child: ci, grand: 0 };
+            }
+        }
+        if (isFilledSlot(main) || children.some(isFilledSlot)) {
+            return { main: mi, child: 0, grand: 0 };
+        }
+    }
+    return { main: 0, child: 0, grand: 0 };
+}
+
 function resolveRingSlot(
     slotIdx: number,
     list: MenuItem[],
@@ -235,6 +270,10 @@ export const PieMenu: React.FC = () => {
     const [activeGrandchildIndex, setActiveGrandchildIndex] = useState<number | null>(null);
     const [isVisible, setIsVisible] = useState(false);
     const [prefsOpen, setPrefsOpen] = useState(false);
+    const [previewTab, setPreviewTab] = useState<AppearancePreviewPayload['previewTab']>(null);
+    const [centerLogoUrl, setCenterLogoUrl] = useState<string | null>(null);
+    const [panelOverlayUrl, setPanelOverlayUrl] = useState<string | null>(null);
+    const demoSavedRef = React.useRef<{ main: number | null; child: number | null; grand: number | null } | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const isDraggingRef = React.useRef(false);
     const dragPointerIdRef = React.useRef<number | null>(null);
@@ -403,6 +442,8 @@ export const PieMenu: React.FC = () => {
             const l7 = await listen('preferences-closed', () => {
                 isPreferencesOpenRef.current = false;
                 setPrefsOpen(false);
+                setPreviewTab(null);
+                demoSavedRef.current = null;
                 // Discard unsaved appearance preview
                 invoke<MenuConfig>('get_config')
                     .then(config => {
@@ -411,14 +452,24 @@ export const PieMenu: React.FC = () => {
                     })
                     .catch(console.error);
             });
-            const l8 = await listen<Partial<AppearanceConfig>>('appearance-preview', (event) => {
+            const l8 = await listen<AppearancePreviewPayload>('appearance-preview', (event) => {
                 const patch = event.payload;
                 if (!patch || typeof patch !== 'object') return;
+                if (patch.previewTab !== undefined) {
+                    setPreviewTab(patch.previewTab ?? null);
+                }
+                if (patch.replayOpenAnimation) {
+                    setIsVisible(false);
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => setIsVisible(true));
+                    });
+                }
                 setConfigFull(prev => {
                     if (!prev) return prev;
+                    const { previewTab: _t, replayOpenAnimation: _r, ...appearancePatch } = patch;
                     return {
                         ...prev,
-                        appearance: { ...prev.appearance, ...patch },
+                        appearance: { ...prev.appearance, ...appearancePatch },
                     };
                 });
             });
@@ -437,6 +488,28 @@ export const PieMenu: React.FC = () => {
     useEffect(() => {
         configRef.current = items;
     }, [items]);
+
+    useEffect(() => {
+        const rel = configFull?.appearance?.center_logo?.trim();
+        if (!rel) {
+            setCenterLogoUrl(null);
+            return;
+        }
+        invoke<string | null>('resolve_appearance_asset', { relPath: rel })
+            .then(path => setCenterLogoUrl(path ? convertFileSrc(path) : null))
+            .catch(() => setCenterLogoUrl(null));
+    }, [configFull?.appearance?.center_logo]);
+
+    useEffect(() => {
+        const rel = configFull?.appearance?.panel_overlay?.trim();
+        if (!rel) {
+            setPanelOverlayUrl(null);
+            return;
+        }
+        invoke<string | null>('resolve_appearance_asset', { relPath: rel })
+            .then(path => setPanelOverlayUrl(path ? convertFileSrc(path) : null))
+            .catch(() => setPanelOverlayUrl(null));
+    }, [configFull?.appearance?.panel_overlay]);
 
     useEffect(() => {
         if (!isVisible) {
@@ -490,6 +563,39 @@ export const PieMenu: React.FC = () => {
         setActiveIndex(index);
         hoveredIndexRef.current = index;
     };
+
+    const demoPreviewActive =
+        prefsOpen
+        && (previewTab === 'theme' || previewTab === 'opacity' || previewTab === 'animations');
+
+    useEffect(() => {
+        if (!demoPreviewActive) {
+            if (demoSavedRef.current) {
+                updateActiveIndex(demoSavedRef.current.main);
+                updateActiveChildIndex(demoSavedRef.current.child);
+                setActiveGrandchildIndex(demoSavedRef.current.grand);
+                demoSavedRef.current = null;
+            }
+            return;
+        }
+        if (!demoSavedRef.current) {
+            demoSavedRef.current = {
+                main: activeIndex,
+                child: activeChildIndex,
+                grand: activeGrandchildIndex,
+            };
+        }
+        const demo = findDemoRingIndices(items);
+        updateActiveIndex(demo.main);
+        updateActiveChildIndex(demo.child);
+        const childItem = items[demo.main]?.children?.[demo.child];
+        if (isGroupItem(childItem)) {
+            setActiveGrandchildIndex(demo.grand);
+        } else {
+            setActiveGrandchildIndex(null);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- demo ring setup when prefs tab changes
+    }, [demoPreviewActive, previewTab, items]);
 
 
     const size = 1000;
@@ -710,6 +816,7 @@ export const PieMenu: React.FC = () => {
     };
 
     const handlePointerDown = (e: React.PointerEvent) => {
+        if (isPreferencesOpenRef.current) return;
         // Middle-click while marking: reveal active panel path in Explorer
         if (e.button === 1) {
             e.preventDefault();
@@ -1298,7 +1405,7 @@ export const PieMenu: React.FC = () => {
 
     return (
         <div
-            className={`pie-menu-container ${isVisible ? 'visible' : ''} ${animClass}`}
+            className={`pie-menu-container ${isVisible ? 'visible' : ''} ${animClass}${isDragging ? ' dragging' : ''}`}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
@@ -1306,6 +1413,17 @@ export const PieMenu: React.FC = () => {
             onContextMenu={handleContextMenu}
             style={customStyles}
         >
+            {/* Panel image overlay */}
+            {panelOverlayUrl && (
+                <div
+                    className="pie-panel-overlay"
+                    style={{
+                        opacity: configFull?.appearance?.panel_overlay_opacity ?? 0.18,
+                        backgroundImage: `url("${panelOverlayUrl}")`,
+                    }}
+                />
+            )}
+
             <svg className="pie-svg" viewBox={`0 0 ${size} ${size}`}>
                 <defs>
                     <filter id="glass-blur">
@@ -1689,7 +1807,7 @@ export const PieMenu: React.FC = () => {
                 );
             })}
 
-            {/* Center HUE label */}
+            {/* Center label / logo */}
             <div
                 className="center-hole"
                 onContextMenu={e => {
@@ -1700,7 +1818,14 @@ export const PieMenu: React.FC = () => {
                 }}
                 title="Right-click for Preferences"
             >
-                <div className="center-text">HUE</div>
+                {centerLogoUrl && (
+                    <img className="center-logo" src={centerLogoUrl} alt="" draggable={false} />
+                )}
+                {(configFull?.appearance?.center_label ?? 'HUE').trim() && (
+                    <div className="center-text">
+                        {configFull?.appearance?.center_label?.trim() || 'HUE'}
+                    </div>
+                )}
             </div>
 
             {showGestureOverlay && debugHud && (
