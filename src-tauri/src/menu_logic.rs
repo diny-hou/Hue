@@ -63,6 +63,13 @@ pub struct AppearanceConfig {
     pub panel_overlay: String,
     #[serde(default = "default_panel_overlay_opacity")]
     pub panel_overlay_opacity: f32,
+    /// Radial depth of the parent ring (px), outer = 70 + this value.
+    #[serde(default = "default_parent_ring_thickness")]
+    pub parent_ring_thickness: f32,
+    #[serde(default = "default_child_ring_thickness")]
+    pub child_ring_thickness: f32,
+    #[serde(default = "default_grand_ring_thickness")]
+    pub grand_ring_thickness: f32,
 }
 
 fn default_hover_animation() -> String {
@@ -138,6 +145,18 @@ fn default_panel_overlay_opacity() -> f32 {
     0.18
 }
 
+fn default_parent_ring_thickness() -> f32 {
+    110.0
+}
+
+fn default_child_ring_thickness() -> f32 {
+    120.0
+}
+
+fn default_grand_ring_thickness() -> f32 {
+    120.0
+}
+
 impl Default for AppearanceConfig {
     fn default() -> Self {
         Self {
@@ -169,6 +188,9 @@ impl Default for AppearanceConfig {
             center_logo: String::new(),
             panel_overlay: String::new(),
             panel_overlay_opacity: default_panel_overlay_opacity(),
+            parent_ring_thickness: default_parent_ring_thickness(),
+            child_ring_thickness: default_child_ring_thickness(),
+            grand_ring_thickness: default_grand_ring_thickness(),
         }
     }
 }

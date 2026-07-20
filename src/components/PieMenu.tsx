@@ -3,6 +3,7 @@ import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { SliceEditor, SliceItem } from './SliceEditor';
 import type { AppearancePreviewPayload } from '../lib/appearanceDefaults';
+import { resolveRingGeometry } from '../lib/ringGeometry';
 
 export interface AppearanceConfig {
     panel_opacity: number;
@@ -36,6 +37,9 @@ export interface AppearanceConfig {
     center_logo?: string;
     panel_overlay?: string;
     panel_overlay_opacity?: number;
+    parent_ring_thickness?: number;
+    child_ring_thickness?: number;
+    grand_ring_thickness?: number;
 }
 
 type GestureZone = 'dead' | 'parent' | 'switch' | 'freeze' | 'grand' | 'retrace';
@@ -55,23 +59,21 @@ type CaptureSample = {
 };
 
 /** Child ring geometry — path split uses the radial midpoint by default. */
-const CHILD_INNER_R = 180;
-const CHILD_OUTER_R = 300;
-const CHILD_MID_R = (CHILD_INNER_R + CHILD_OUTER_R) / 2; // 240
-
 function resolveGestureThresholds(appearance?: AppearanceConfig | null) {
+    const rings = resolveRingGeometry(appearance);
     return {
         /** Inner half of child ring: child may switch. Outer half+: path / grand. */
         childSwitchMax: (() => {
             const v = appearance?.gesture_child_switch_max;
             // Previous default was 250; treat as child-mid so path corridor starts at half
-            if (v === undefined || v === 250) return CHILD_MID_R;
+            if (v === undefined || v === 250) return rings.childMidRadius;
             return v;
         })(),
-        grandEnter: appearance?.gesture_grand_enter ?? 300,
-        grandEnterHybrid: appearance?.gesture_grand_enter_hybrid ?? 320,
-        retraceGrand: appearance?.gesture_retrace_grand ?? CHILD_MID_R,
+        grandEnter: appearance?.gesture_grand_enter ?? rings.childOuterRadius,
+        grandEnterHybrid: appearance?.gesture_grand_enter_hybrid ?? rings.childOuterRadius + 20,
+        retraceGrand: appearance?.gesture_retrace_grand ?? rings.childInnerRadius,
         retraceChild: appearance?.gesture_retrace_child ?? 140,
+        rings,
     };
 }
 
@@ -600,19 +602,18 @@ export const PieMenu: React.FC = () => {
 
     const size = 1000;
     const center = size / 2;
-    const outerRadius = 180;
-    const innerRadius = 70;
+    const rings = resolveRingGeometry(configFull?.appearance);
+    const {
+        innerRadius,
+        outerRadius,
+        childInnerRadius,
+        childOuterRadius,
+        grandInnerRadius,
+        grandOuterRadius,
+    } = rings;
 
     const sliceAngle = items.length > 0 ? 360 / items.length : 360;
     const halfSlice = sliceAngle / 2; // Offset so panels CENTER on cardinal directions
-
-    // Child ring dimensions
-    const childInnerRadius = CHILD_INNER_R; // connect seamlessly with outerRadius
-    const childOuterRadius = CHILD_OUTER_R;
-
-    // Grandchild ring dimensions
-    const grandInnerRadius = 300;
-    const grandOuterRadius = 420;
 
     // We will display 8 children slots per parent in a full circle
     const maxChildrenVisible = 8;

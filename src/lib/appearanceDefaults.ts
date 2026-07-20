@@ -29,6 +29,9 @@ export const DEFAULT_APPEARANCE: AppearanceConfig = {
     center_logo: '',
     panel_overlay: '',
     panel_overlay_opacity: 0.18,
+    parent_ring_thickness: 110,
+    child_ring_thickness: 120,
+    grand_ring_thickness: 120,
 };
 
 export type AppearancePreviewPayload = AppearanceConfig & {
@@ -50,6 +53,9 @@ export const THEME_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [
     'center_logo',
     'panel_overlay',
     'panel_overlay_opacity',
+    'parent_ring_thickness',
+    'child_ring_thickness',
+    'grand_ring_thickness',
 ];
 
 export const OPACITY_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [

@@ -1061,6 +1061,14 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.pref-value-numeric {
+  font-size: 12px;
+  min-width: 4ch;
+  text-align: right;
+  color: rgba(255, 255, 255, 0.75);
+  font-variant-numeric: tabular-nums;
+}
+
 .pref-tabs {
   display: flex;
   flex-wrap: wrap;

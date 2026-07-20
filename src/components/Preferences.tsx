@@ -282,6 +282,15 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     const [panelOverlayOpacity, setPanelOverlayOpacity] = useState(
         config.appearance?.panel_overlay_opacity ?? DEFAULT_APPEARANCE.panel_overlay_opacity!,
     );
+    const [parentRingThickness, setParentRingThickness] = useState(
+        config.appearance?.parent_ring_thickness ?? DEFAULT_APPEARANCE.parent_ring_thickness!,
+    );
+    const [childRingThickness, setChildRingThickness] = useState(
+        config.appearance?.child_ring_thickness ?? DEFAULT_APPEARANCE.child_ring_thickness!,
+    );
+    const [grandRingThickness, setGrandRingThickness] = useState(
+        config.appearance?.grand_ring_thickness ?? DEFAULT_APPEARANCE.grand_ring_thickness!,
+    );
     const [imageBusy, setImageBusy] = useState(false);
 
     const [isRecording, setIsRecording] = useState(false);
@@ -323,6 +332,9 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         center_logo: centerLogo,
         panel_overlay: panelOverlay,
         panel_overlay_opacity: panelOverlayOpacity,
+        parent_ring_thickness: parentRingThickness,
+        child_ring_thickness: childRingThickness,
+        grand_ring_thickness: grandRingThickness,
     });
 
     const emitPreview = (extra?: Partial<AppearancePreviewPayload>) => {
@@ -366,6 +378,9 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         if (d.center_logo !== undefined) setCenterLogo(d.center_logo);
         if (d.panel_overlay !== undefined) setPanelOverlay(d.panel_overlay);
         if (d.panel_overlay_opacity !== undefined) setPanelOverlayOpacity(d.panel_overlay_opacity);
+        if (d.parent_ring_thickness !== undefined) setParentRingThickness(d.parent_ring_thickness);
+        if (d.child_ring_thickness !== undefined) setChildRingThickness(d.child_ring_thickness);
+        if (d.grand_ring_thickness !== undefined) setGrandRingThickness(d.grand_ring_thickness);
         window.setTimeout(() => emitPreview(extra), 0);
     };
 
@@ -423,6 +438,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         childSwitchMax, grandEnter, grandEnterHybrid, retraceGrand, retraceChild,
         prefsBg, prefsAccent, prefsText, prefsChrome,
         centerLabel, centerLogo, panelOverlay, panelOverlayOpacity,
+        parentRingThickness, childRingThickness, grandRingThickness,
         activeTab,
     ]);
 
@@ -766,7 +782,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         <div className="pref-tab-toolbar">
                             <span className="pref-tab-toolbar-title">Pie &amp; text</span>
                             <PrefTabReset onReset={() => applyDefaults(THEME_DEFAULT_KEYS.filter(k =>
-                                !['prefs_bg', 'prefs_accent', 'prefs_text', 'prefs_chrome', 'center_label', 'center_logo', 'panel_overlay', 'panel_overlay_opacity'].includes(k)
+                                !['prefs_bg', 'prefs_accent', 'prefs_text', 'prefs_chrome', 'center_label', 'center_logo', 'panel_overlay', 'panel_overlay_opacity', 'parent_ring_thickness', 'child_ring_thickness', 'grand_ring_thickness'].includes(k)
                             ))} />
                         </div>
                         <div className="pref-row">
@@ -824,6 +840,57 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 <span style={{ fontSize: '12px', minWidth: '3ch' }}>{subPanelTextSize}px</span>
                             </div>
                         </div>
+
+                        <div className="pref-tab-toolbar" style={{ marginTop: '16px' }}>
+                            <span className="pref-tab-toolbar-title">Ring depth (parent / child / grand)</span>
+                            <PrefTabReset onReset={() => applyDefaults(['parent_ring_thickness', 'child_ring_thickness', 'grand_ring_thickness'])} />
+                        </div>
+                        <div className="pref-row">
+                            <label>Parent ring</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                                <input
+                                    type="range"
+                                    min="60"
+                                    max="160"
+                                    step="2"
+                                    style={{ flex: 1 }}
+                                    value={parentRingThickness}
+                                    onChange={(e) => setParentRingThickness(Number(e.target.value))}
+                                />
+                                <span className="pref-value-numeric">{Math.round(parentRingThickness)}px</span>
+                            </div>
+                        </div>
+                        <div className="pref-row">
+                            <label>Child ring</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                                <input
+                                    type="range"
+                                    min="60"
+                                    max="180"
+                                    step="2"
+                                    style={{ flex: 1 }}
+                                    value={childRingThickness}
+                                    onChange={(e) => setChildRingThickness(Number(e.target.value))}
+                                />
+                                <span className="pref-value-numeric">{Math.round(childRingThickness)}px</span>
+                            </div>
+                        </div>
+                        <div className="pref-row">
+                            <label>Grand ring</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                                <input
+                                    type="range"
+                                    min="60"
+                                    max="180"
+                                    step="2"
+                                    style={{ flex: 1 }}
+                                    value={grandRingThickness}
+                                    onChange={(e) => setGrandRingThickness(Number(e.target.value))}
+                                />
+                                <span className="pref-value-numeric">{Math.round(grandRingThickness)}px</span>
+                            </div>
+                        </div>
+                        <small className="pref-hint">Radial thickness of each panel ring. Rings stay connected — changing one shifts the next ring outward.</small>
 
                         <div className="pref-tab-toolbar" style={{ marginTop: '16px' }}>
                             <span className="pref-tab-toolbar-title">Center label &amp; logo</span>
