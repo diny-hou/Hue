@@ -4,7 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { SliceEditor, SliceItem } from './SliceEditor';
 import type { AppearancePreviewPayload } from '../lib/appearanceDefaults';
 import {
-    markingTrailSegments,
+    drawMarkingTrail,
     pushMarkingTrailPoint,
     type MarkingTrailPoint,
 } from '../lib/markingTrail';
@@ -291,6 +291,7 @@ export const PieMenu: React.FC = () => {
     const lastAngleRef = React.useRef(0);
     const lastShowTimeRef = React.useRef(0);
     const clickThroughStateRef = React.useRef({ editorOpen: false, hitDiskRadius: 180 });
+    const markingCanvasRef = React.useRef<HTMLCanvasElement>(null);
     const markingTrailRef = React.useRef<MarkingTrailPoint[]>([]);
     const captureRef = React.useRef<CaptureSample[]>([]);
     const gestureStartMsRef = React.useRef(0);
@@ -598,12 +599,20 @@ export const PieMenu: React.FC = () => {
     const showGestureOverlay = gestureDebug || gestureCapture || (prefsOpen && isDragging);
     /** Product marking trail — always on while dragging (except capture mode). */
     const showMarkingTrail = isDragging && !gestureCapture;
-    const markingTrailSegs = React.useMemo(
-        () => markingTrailSegments(markingTrail),
-        [markingTrail],
-    );
     const th = resolveGestureThresholds(configFull?.appearance);
     const DEAD_ZONE = 40;
+
+    useEffect(() => {
+        const canvas = markingCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        if (!showMarkingTrail || markingTrail.length === 0) {
+            ctx.clearRect(0, 0, size, size);
+            return;
+        }
+        drawMarkingTrail(ctx, markingTrail, size);
+    }, [markingTrail, showMarkingTrail, size]);
 
     const pushMarkingTrail = (x: number, y: number) => {
         const next = pushMarkingTrailPoint(markingTrailRef.current, x, y);
@@ -1541,56 +1550,14 @@ export const PieMenu: React.FC = () => {
                 })()}
             </svg>
 
-            {showMarkingTrail && markingTrail.length > 0 && (
-                <svg
+            {showMarkingTrail && (
+                <canvas
+                    ref={markingCanvasRef}
                     className="gesture-marking-overlay"
-                    viewBox={`0 0 ${size} ${size}`}
-                    pointerEvents="none"
-                >
-                    <defs>
-                        <filter id="marking-trail-glow" x="-50%" y="-50%" width="200%" height="200%">
-                            <feGaussianBlur stdDeviation="3" result="blur" />
-                            <feMerge>
-                                <feMergeNode in="blur" />
-                                <feMergeNode in="SourceGraphic" />
-                            </feMerge>
-                        </filter>
-                    </defs>
-                    <g className="gesture-marking-trail" filter="url(#marking-trail-glow)">
-                        {markingTrailSegs.map((seg, i) => (
-                            <g key={`mt-${i}`}>
-                                <line
-                                    className="gesture-marking-trail-glow"
-                                    x1={seg.x1}
-                                    y1={seg.y1}
-                                    x2={seg.x2}
-                                    y2={seg.y2}
-                                    strokeWidth={seg.width * 2.4}
-                                    opacity={seg.opacity * 0.22}
-                                />
-                                <line
-                                    className="gesture-marking-trail-core"
-                                    x1={seg.x1}
-                                    y1={seg.y1}
-                                    x2={seg.x2}
-                                    y2={seg.y2}
-                                    strokeWidth={seg.width}
-                                    opacity={seg.opacity * 0.92}
-                                />
-                            </g>
-                        ))}
-                    </g>
-                    {(() => {
-                        const last = markingTrail[markingTrail.length - 1];
-                        if (!last) return null;
-                        return (
-                            <g className="gesture-marking-head">
-                                <circle cx={last.x} cy={last.y} r={10} className="gesture-marking-head-halo" />
-                                <circle cx={last.x} cy={last.y} r={4.5} className="gesture-marking-head-core" />
-                            </g>
-                        );
-                    })()}
-                </svg>
+                    width={size}
+                    height={size}
+                    aria-hidden="true"
+                />
             )}
 
             {/* Unrotated overlay: pie-svg uses rotate(-90deg), so trail/rings must live outside it */}

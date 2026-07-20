@@ -1701,27 +1701,6 @@ body {
   height: 100%;
   pointer-events: none;
   z-index: 36;
-  overflow: visible;
-}
-
-.gesture-marking-trail-glow {
-  stroke: rgba(165, 180, 252, 0.95);
-  stroke-linecap: round;
-}
-
-.gesture-marking-trail-core {
-  stroke: rgba(255, 255, 255, 0.92);
-  stroke-linecap: round;
-}
-
-.gesture-marking-head-halo {
-  fill: rgba(129, 140, 248, 0.28);
-}
-
-.gesture-marking-head-core {
-  fill: rgba(255, 255, 255, 0.95);
-  stroke: rgba(99, 102, 241, 0.65);
-  stroke-width: 1.5;
 }
 
 .gesture-debug-overlay {
