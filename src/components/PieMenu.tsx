@@ -552,7 +552,15 @@ export const PieMenu: React.FC = () => {
 
     const demoPreviewActive =
         prefsOpen
-        && (previewTab === 'theme' || previewTab === 'opacity' || previewTab === 'animations');
+        && (
+            previewTab == null
+            || previewTab === 'general'
+            || previewTab === 'theme'
+            || previewTab === 'opacity'
+            || previewTab === 'animations'
+        );
+    /** Preferences live preview: always show child + grand rings so slice counts are visible. */
+    const forceDemoRings = demoPreviewActive;
 
     useEffect(() => {
         if (!demoPreviewActive) {
@@ -575,13 +583,9 @@ export const PieMenu: React.FC = () => {
         const demo = findDemoRingIndices(items);
         updateActiveIndex(demo.main);
         updateActiveChildIndex(demo.child);
-        const childItem = items[demo.main]?.children?.[demo.child];
-        if (isGroupItem(childItem)) {
-            setActiveGrandchildIndex(demo.grand);
-        } else {
-            setActiveGrandchildIndex(null);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- demo ring setup when prefs tab changes
+        // Keep grand ring open during prefs preview (even if that child has no nested group yet).
+        setActiveGrandchildIndex(demo.grand);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- demo ring setup when prefs tab / items change
     }, [demoPreviewActive, previewTab, items]);
 
 
@@ -1399,7 +1403,7 @@ export const PieMenu: React.FC = () => {
     const isGroupOpen =
         activeIndex !== null &&
         !!items[activeIndex] &&
-        isGroupItem(items[activeIndex]);
+        (isGroupItem(items[activeIndex]) || forceDemoRings);
 
     const activeChildItem =
         activeIndex !== null && activeChildIndex !== null
@@ -1409,12 +1413,12 @@ export const PieMenu: React.FC = () => {
     const isGrandGroupOpen =
         isGroupOpen &&
         activeChildIndex !== null &&
-        isGroupItem(activeChildItem);
+        (isGroupItem(activeChildItem) || forceDemoRings);
 
     // If any sub can open a grand ring, keep the hit disk large from the moment the parent opens
     // so the pointer is not clipped by OS click-through before React expands the ring.
     const hitDiskRadius =
-        isGroupOpen && groupHasGrandRing(items[activeIndex!])
+        forceDemoRings || (isGroupOpen && groupHasGrandRing(items[activeIndex!]))
             ? grandOuterRadius
             : isGrandGroupOpen
                 ? grandOuterRadius
@@ -1500,10 +1504,9 @@ export const PieMenu: React.FC = () => {
                     );
                 })}
                 {/* ── Sub-menu ring (Dynamic) ── */}
-                {activeIndex !== null && (() => {
+                {activeIndex !== null && isGroupOpen && (() => {
                     const currentItem = items[activeIndex];
                     if (!currentItem) return null;
-                    if (!isGroupItem(currentItem)) return null;
 
                     const childList = currentItem.children ?? [];
                     const childSpiral = isAutoGroup(currentItem) && childList.length > childSlots;
@@ -1543,9 +1546,9 @@ export const PieMenu: React.FC = () => {
                 {/* ── Grandchild ring ── */}
                 {isGrandGroupOpen && activeIndex !== null && activeChildIndex !== null && (() => {
                     const childItem = items[activeIndex]?.children?.[activeChildIndex];
-                    if (!childItem || !isGroupItem(childItem)) return null;
+                    if (!forceDemoRings && (!childItem || !isGroupItem(childItem))) return null;
 
-                    const grandList = childItem.children ?? [];
+                    const grandList = childItem?.children ?? [];
                     const grandSpiral = isAutoGroup(childItem) && grandList.length > grandSlots;
                     const childAuto = isAutoGroup(childItem);
 
@@ -1650,10 +1653,9 @@ export const PieMenu: React.FC = () => {
             )}
 
             {/* Sub-menu labels */}
-            {activeIndex !== null && (() => {
+            {activeIndex !== null && isGroupOpen && (() => {
                 const currentItem = items[activeIndex];
                 if (!currentItem) return null;
-                if (!isGroupItem(currentItem)) return null;
 
                 const childList = currentItem.children ?? [];
                 const childSpiral = isAutoGroup(currentItem) && childList.length > childSlots;
@@ -1722,9 +1724,9 @@ export const PieMenu: React.FC = () => {
             {/* Grandchild labels */}
             {isGrandGroupOpen && activeIndex !== null && activeChildIndex !== null && (() => {
                 const childItem = items[activeIndex]?.children?.[activeChildIndex];
-                if (!childItem) return null;
+                if (!forceDemoRings && !childItem) return null;
 
-                const grandList = childItem.children ?? [];
+                const grandList = childItem?.children ?? [];
                 const grandSpiral = isAutoGroup(childItem) && grandList.length > grandSlots;
                 const childAuto = isAutoGroup(childItem);
 

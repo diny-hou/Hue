@@ -423,15 +423,13 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         applyDefaults(Object.keys(DEFAULT_APPEARANCE) as (keyof AppearanceConfig)[], { replayOpenAnimation: true });
     };
 
-    // Live-preview appearance (esp. threshold rings) on the main pie while Preferences is open
+    // Live-preview appearance (esp. threshold rings / slice counts) on the main pie while Preferences is open
     useEffect(() => {
-        if (!previewReadyRef.current) {
-            previewReadyRef.current = true;
-            return;
-        }
+        const delay = previewReadyRef.current ? 40 : 80;
+        previewReadyRef.current = true;
         const timer = window.setTimeout(() => {
             emitPreview();
-        }, 40);
+        }, delay);
         return () => window.clearTimeout(timer);
         // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional live preview deps
     }, [
