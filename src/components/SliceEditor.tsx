@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { FolderOpen, ArrowUp, ArrowDown, GripVertical } from 'lucide-react';
+import { TagInput } from './TagInput';
+import { formatAutoTagsLabel, normalizeAutoTags } from '../lib/autoTags';
 
 export interface AutoConfig {
     enabled: boolean;
     folder: string;
-    tag: string;
+    /** @deprecated legacy single tag — use `tags` */
+    tag?: string;
+    tags?: string[];
 }
 
 export interface SliceItem {
@@ -61,7 +65,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
     const autoAllowed = allowChildren && allowAuto;
     const [autoEnabled, setAutoEnabled] = useState(!!item.auto?.enabled && allowAuto);
     const [autoFolder, setAutoFolder] = useState(item.auto?.folder ?? item.path ?? '');
-    const [autoTag, setAutoTag] = useState(item.auto?.tag ?? '');
+    const [autoTags, setAutoTags] = useState<string[]>(() => normalizeAutoTags(item.auto));
     const [autoPreview, setAutoPreview] = useState<AutoEntry[]>([]);
     const [autoPreviewError, setAutoPreviewError] = useState<string | null>(null);
 
@@ -77,7 +81,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
         !item.auto?.enabled && (item.children || []).some(c => c.name.trim() || c.path.trim())
     );
 
-    const refreshAutoPreview = React.useCallback(async (folder: string, tag: string) => {
+    const refreshAutoPreview = React.useCallback(async (folder: string, tags: string[]) => {
         const f = folder.trim();
         if (!f) {
             setAutoPreview([]);
@@ -85,7 +89,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
             return;
         }
         try {
-            const entries = await invoke<AutoEntry[]>('list_auto_entries', { folder: f, tag });
+            const entries = await invoke<AutoEntry[]>('list_auto_entries', { folder: f, tags });
             setAutoPreview(entries);
             setAutoPreviewError(null);
         } catch (e) {
@@ -100,8 +104,8 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
 
     React.useEffect(() => {
         if (!autoEnabled || !autoAllowed) return;
-        void refreshAutoPreview(autoFolder, autoTag);
-    }, [autoEnabled, autoFolder, autoTag, autoAllowed, refreshAutoPreview]);
+        void refreshAutoPreview(autoFolder, autoTags);
+    }, [autoEnabled, autoFolder, autoTags, autoAllowed, refreshAutoPreview]);
 
     React.useEffect(() => {
         if (!allowAuto && autoEnabled) {
@@ -221,7 +225,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
         setPath('');
         setAutoEnabled(false);
         setAutoFolder('');
-        setAutoTag('');
+        setAutoTags([]);
         setAutoPreview([]);
         if (allowChildren) {
             setChildrenList(Array.from({ length: 8 }, () => ({ name: '', path: '', children: [] })));
@@ -244,7 +248,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
             ? {
                 enabled: true,
                 folder: autoFolder.trim() || path.trim(),
-                tag: autoTag.trim(),
+                tags: autoTags,
             }
             : null;
 
@@ -252,7 +256,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
             try {
                 finalChildren = await invoke<AutoEntry[]>('list_auto_entries', {
                     folder: autoConfig.folder,
-                    tag: autoConfig.tag,
+                    tags: autoConfig.tags ?? [],
                 }).then(entries => entries.map(e => ({
                     name: e.name,
                     path: e.path,
@@ -425,17 +429,15 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
                                         </button>
                                     </div>
                                 </div>
-                                <label className="slice-editor-label">Filename tag (optional)</label>
-                                <input
-                                    className="slice-editor-input"
-                                    type="text"
-                                    value={autoTag}
-                                    onChange={e => setAutoTag(e.target.value)}
-                                    placeholder="Leave empty = all files and folders"
+                                <label className="slice-editor-label">Filename tags (optional)</label>
+                                <TagInput
+                                    tags={autoTags}
+                                    onChange={setAutoTags}
+                                    placeholder="Type and press Enter"
                                 />
                                 <small className="slice-editor-auto-hint">
-                                    Empty tag lists every file and folder in this directory (not recursive).
-                                    With a tag, only names containing that text are included.
+                                    No tags lists every file and folder in this directory (not recursive).
+                                    With tags, names matching any tag are included.
                                 </small>
                                 <div className="slice-editor-auto-preview">
                                     {autoPreviewError ? (
@@ -444,7 +446,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
                                         <>
                                             <span className="slice-editor-auto-preview-count">
                                                 {autoPreview.length} item{autoPreview.length === 1 ? '' : 's'}
-                                                {!autoTag.trim() ? ' · files & folders' : ` · tag “${autoTag.trim()}”`}
+                                                {' · '}{formatAutoTagsLabel(autoTags)}
                                                 {autoPreview.length > 8 ? ' · spiral when >8' : ''}
                                             </span>
                                             {autoPreview.slice(0, 5).map((entry, i) => (

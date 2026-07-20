@@ -251,8 +251,11 @@ pub struct AutoConfig {
     pub enabled: bool,
     #[serde(default)]
     pub folder: String,
+    /// Legacy single tag (migrated to `tags` on read).
     #[serde(default)]
     pub tag: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
@@ -286,20 +289,46 @@ pub fn auto_folder(item: &MenuItem) -> &str {
         .unwrap_or(item.path.as_str())
 }
 
-pub fn auto_tag(item: &MenuItem) -> &str {
-    item.auto.as_ref().map(|a| a.tag.as_str()).unwrap_or("")
+pub fn auto_tags_for(config: &AutoConfig) -> Vec<String> {
+    let from_tags: Vec<String> = config
+        .tags
+        .iter()
+        .map(|t| t.trim())
+        .filter(|t| !t.is_empty())
+        .map(|t| t.to_string())
+        .collect();
+    if !from_tags.is_empty() {
+        return from_tags;
+    }
+    let legacy = config.tag.trim();
+    if legacy.is_empty() {
+        vec![]
+    } else {
+        vec![legacy.to_string()]
+    }
+}
+
+pub fn auto_tags(item: &MenuItem) -> Vec<String> {
+    item.auto
+        .as_ref()
+        .map(auto_tags_for)
+        .unwrap_or_default()
 }
 
 /// List files and folders directly inside `folder` (non-recursive).
-/// Empty / whitespace `tag` → include every entry. Non-empty → name contains tag (case-insensitive).
-pub fn list_auto_entries(folder: &str, tag: &str) -> Result<Vec<AutoEntry>, String> {
+/// Empty tags → include every entry. Non-empty → name contains any tag (case-insensitive).
+pub fn list_auto_entries(folder: &str, tags: &[String]) -> Result<Vec<AutoEntry>, String> {
     let dir = std::path::Path::new(folder.trim());
     if !dir.is_dir() {
         return Err(format!("Not a folder: {}", folder));
     }
 
-    let tag_lower = tag.trim().to_lowercase();
-    let filter_by_tag = !tag_lower.is_empty();
+    let tags_lower: Vec<String> = tags
+        .iter()
+        .map(|t| t.trim().to_lowercase())
+        .filter(|t| !t.is_empty())
+        .collect();
+    let filter_by_tag = !tags_lower.is_empty();
     let mut entries: Vec<AutoEntry> = Vec::new();
 
     let read_dir = fs::read_dir(dir).map_err(|e| format!("Failed to read folder: {e}"))?;
@@ -319,8 +348,11 @@ pub fn list_auto_entries(folder: &str, tag: &str) -> Result<Vec<AutoEntry>, Stri
         if file_name.starts_with('.') {
             continue;
         }
-        if filter_by_tag && !file_name.to_lowercase().contains(&tag_lower) {
-            continue;
+        if filter_by_tag {
+            let name_lower = file_name.to_lowercase();
+            if !tags_lower.iter().any(|t| name_lower.contains(t)) {
+                continue;
+            }
         }
         let display = if is_dir {
             file_name.to_string()
@@ -356,8 +388,8 @@ fn sync_item_children(item: &mut MenuItem) -> bool {
     let mut changed = false;
     if auto_enabled(item) {
         let folder = auto_folder(item).to_string();
-        let tag = auto_tag(item).to_string();
-        match list_auto_entries(&folder, &tag) {
+        let tags = auto_tags(item);
+        match list_auto_entries(&folder, &tags) {
             Ok(entries) => {
                 let new_children: Vec<MenuItem> = entries
                     .into_iter()

@@ -30,6 +30,8 @@ import {
     PREFS_CHROME_OPTIONS,
     PrefSelect,
 } from './PrefSelect';
+import { TagInput } from './TagInput';
+import { normalizeAutoTags } from '../lib/autoTags';
 
 function normalizePrefsChrome(value?: string): string {
     if (value === 'liquid_glass') return 'glass';
@@ -53,7 +55,7 @@ type AutoListEntry = {
     grandIndex: number | null;
     name: string;
     folder: string;
-    tag: string;
+    tags: string[];
     context?: string;
 };
 
@@ -113,7 +115,7 @@ function collectAutoEntries(items: SliceItem[]): AutoListEntry[] {
                 grandIndex: null,
                 name: main.name.trim() || `Parent ${mi + 1}`,
                 folder: main.auto.folder?.trim() || main.path || '',
-                tag: main.auto.tag ?? '',
+                tags: normalizeAutoTags(main.auto),
             });
         }
         (main.children || []).forEach((child, ci) => {
@@ -125,7 +127,7 @@ function collectAutoEntries(items: SliceItem[]): AutoListEntry[] {
                     grandIndex: null,
                     name: child.name.trim() || `Child ${ci + 1}`,
                     folder: child.auto.folder?.trim() || child.path || '',
-                    tag: child.auto.tag ?? '',
+                    tags: normalizeAutoTags(child.auto),
                     context: main.name.trim() || `Parent ${mi + 1}`,
                 });
             }
@@ -138,7 +140,7 @@ function collectAutoEntries(items: SliceItem[]): AutoListEntry[] {
                         grandIndex: gi,
                         name: grand.name.trim() || `Grand ${gi + 1}`,
                         folder: grand.auto.folder?.trim() || grand.path || '',
-                        tag: grand.auto.tag ?? '',
+                        tags: normalizeAutoTags(grand.auto),
                         context: `${main.name.trim() || `Parent ${mi + 1}`} › ${child.name.trim() || `Child ${ci + 1}`}`,
                     });
                 }
@@ -163,7 +165,7 @@ function getAutoItem(items: SliceItem[], entry: AutoListEntry): SliceItem | null
 function patchAutoItem(
     items: SliceItem[],
     entry: AutoListEntry,
-    patch: { folder?: string; tag?: string },
+    patch: { folder?: string; tags?: string[] },
 ): SliceItem[] {
     const next = cloneItems(items);
     const item = getAutoItem(next, entry);
@@ -171,7 +173,7 @@ function patchAutoItem(
     item.auto = {
         enabled: true,
         folder: patch.folder ?? item.auto?.folder ?? '',
-        tag: patch.tag ?? item.auto?.tag ?? '',
+        tags: patch.tags ?? normalizeAutoTags(item.auto),
     };
     return next;
 }
@@ -1184,8 +1186,8 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         </div>
                         <div className="pref-row" style={{ marginTop: '4px' }}>
                             <small style={{ color: '#aaa' }}>
-                                Registered Auto sources by depth. Empty tag = files and folders in that directory only (not recursive).
-                                Reorder with arrows, change folder/tag, then Apply.
+                                Registered Auto sources by depth. No tags = files and folders in that directory only (not recursive).
+                                Reorder with arrows, change folder/tags, then Apply.
                             </small>
                         </div>
                         {autoEntries.length === 0 ? (
@@ -1253,17 +1255,14 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                                         </button>
                                                     </div>
                                                     <label className="slice-editor-label" style={{ margin: 0 }}>
-                                                        Tag (empty = all files)
+                                                        Tags (empty = all files)
                                                     </label>
-                                                    <input
-                                                        className="slice-editor-input"
-                                                        type="text"
-                                                        value={entry.tag}
-                                                        onChange={e => {
-                                                            const tag = e.target.value;
-                                                            setMenuItemsDirty(prev => patchAutoItem(prev, entry, { tag }));
+                                                    <TagInput
+                                                        tags={entry.tags}
+                                                        onChange={tags => {
+                                                            setMenuItemsDirty(prev => patchAutoItem(prev, entry, { tags }));
                                                         }}
-                                                        placeholder="Optional filename filter"
+                                                        placeholder="Type and press Enter"
                                                     />
                                                 </div>
                                             ))}

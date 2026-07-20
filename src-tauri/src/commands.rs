@@ -272,8 +272,8 @@ pub fn close_preferences_window(app_handle: tauri::AppHandle) {
 }
 
 #[tauri::command]
-pub fn list_auto_entries(folder: String, tag: String) -> Result<Vec<AutoEntry>, String> {
-    menu_logic::list_auto_entries(&folder, &tag)
+pub fn list_auto_entries(folder: String, tags: Vec<String>) -> Result<Vec<AutoEntry>, String> {
+    menu_logic::list_auto_entries(&folder, &tags)
 }
 
 #[tauri::command]

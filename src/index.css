@@ -478,6 +478,65 @@ body {
   color: rgba(255, 255, 255, 0.45);
 }
 
+.tag-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.tag-input-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(99, 102, 241, 0.35);
+  border: 1px solid rgba(129, 140, 248, 0.45);
+}
+
+.tag-input-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.2);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tag-input-chip-remove:hover {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.tag-input-field {
+  flex: 1 1 80px;
+  min-width: 80px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 13px;
+  outline: none;
+}
+
+.tag-input-field::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
 .pref-auto-list {
   display: flex;
   flex-direction: column;
