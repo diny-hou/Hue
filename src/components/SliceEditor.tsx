@@ -26,6 +26,8 @@ interface SliceEditorProps {
     allowChildren?: boolean;
     /** When false, Auto toggle is hidden (e.g. parent already uses Auto). */
     allowAuto?: boolean;
+    /** Manual group slot count (1–8). Auto lists may exceed this and spiral. */
+    maxSlots?: number;
     addChildrenLabel?: string;
     groupChildrenLabel?: string;
     onSave: (item: SliceItem) => void;
@@ -47,11 +49,14 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
     position,
     allowChildren = true,
     allowAuto = true,
+    maxSlots = 8,
     addChildrenLabel = '+ Add sub-items',
-    groupChildrenLabel = 'Group Items (8 Slots)',
+    groupChildrenLabel,
     onSave,
     onCancel,
 }) => {
+    const slotCount = Math.min(8, Math.max(1, Math.round(maxSlots)));
+    const slotsLabel = groupChildrenLabel ?? `Group Items (${slotCount} Slots)`;
     const [name, setName] = useState(item.name);
     const [path, setPath] = useState(item.path);
     const [pos, setPos] = useState({ x: position.x, y: position.y });
@@ -71,10 +76,10 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
 
     const [childrenList, setChildrenList] = useState<SliceItem[]>(() => {
         const initialChildren = [...(item.children || [])];
-        while (initialChildren.length < 8) {
+        while (initialChildren.length < slotCount) {
             initialChildren.push({ name: '', path: '', children: [] });
         }
-        return initialChildren.slice(0, 8);
+        return initialChildren.slice(0, slotCount);
     });
 
     const [showChildren, setShowChildren] = useState(() =>
@@ -228,7 +233,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
         setAutoTags([]);
         setAutoPreview([]);
         if (allowChildren) {
-            setChildrenList(Array.from({ length: 8 }, () => ({ name: '', path: '', children: [] })));
+            setChildrenList(Array.from({ length: slotCount }, () => ({ name: '', path: '', children: [] })));
             setShowChildren(false);
         }
     };
@@ -447,7 +452,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
                                             <span className="slice-editor-auto-preview-count">
                                                 {autoPreview.length} item{autoPreview.length === 1 ? '' : 's'}
                                                 {' · '}{formatAutoTagsLabel(autoTags)}
-                                                {autoPreview.length > 8 ? ' · spiral when >8' : ''}
+                                                {autoPreview.length > slotCount ? ` · spiral when >${slotCount}` : ''}
                                             </span>
                                             {autoPreview.slice(0, 5).map((entry, i) => (
                                                 <span key={`${entry.path}-${i}`} className="slice-editor-auto-preview-item">{entry.name}</span>
@@ -475,7 +480,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
 
                 {allowChildren && !autoEnabled && showChildren && (
                     <div className="slice-editor-section slice-editor-group-children">
-                        <label className="slice-editor-label">{groupChildrenLabel}</label>
+                        <label className="slice-editor-label">{slotsLabel}</label>
                         <div className="slice-editor-children-list">
                             {childrenList.map((child, idx) => (
                                 <div

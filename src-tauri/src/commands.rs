@@ -291,7 +291,8 @@ pub fn sync_auto_items(app_handle: tauri::AppHandle) -> MenuConfig {
 #[tauri::command]
 pub fn empty_all_slices(app_handle: tauri::AppHandle) {
     let mut config = menu_logic::load_config(&app_handle);
-    config.items = (0..8)
+    let n = menu_logic::clamp_slice_count(config.appearance.parent_slice_count) as usize;
+    config.items = (0..n)
         .map(|_| menu_logic::MenuItem {
             name: String::new(),
             path: String::new(),

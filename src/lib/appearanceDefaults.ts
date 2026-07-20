@@ -30,6 +30,9 @@ export const DEFAULT_APPEARANCE: AppearanceConfig = {
     prefs_chrome: 'normal',
     center_label: 'HUE',
     marking_trail_color: '#ffffff',
+    parent_slice_count: 8,
+    child_slice_count: 8,
+    grand_slice_count: 8,
 };
 
 export type AppearancePreviewPayload = AppearanceConfig & {
@@ -91,6 +94,12 @@ export const RING_SIZE_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [
     'parent_ring_weight',
     'child_ring_weight',
     'grand_ring_weight',
+];
+
+export const SLICE_COUNT_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [
+    'parent_slice_count',
+    'child_slice_count',
+    'grand_slice_count',
 ];
 
 export const GESTURE_HIT_ZONE_DEFAULT_KEYS: (keyof AppearanceConfig)[] = [

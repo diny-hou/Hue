@@ -82,6 +82,13 @@ pub struct AppearanceConfig {
     pub child_ring_thickness: f32,
     #[serde(default = "default_grand_ring_thickness")]
     pub grand_ring_thickness: f32,
+    /// Parent / child / grand ring slice counts (1–8).
+    #[serde(default = "default_slice_count")]
+    pub parent_slice_count: u32,
+    #[serde(default = "default_slice_count")]
+    pub child_slice_count: u32,
+    #[serde(default = "default_slice_count")]
+    pub grand_slice_count: u32,
 }
 
 fn default_hover_animation() -> String {
@@ -201,6 +208,14 @@ fn default_grand_ring_thickness() -> f32 {
     120.0
 }
 
+fn default_slice_count() -> u32 {
+    8
+}
+
+pub fn clamp_slice_count(n: u32) -> u32 {
+    n.clamp(1, 8)
+}
+
 impl Default for AppearanceConfig {
     fn default() -> Self {
         Self {
@@ -241,6 +256,9 @@ impl Default for AppearanceConfig {
             parent_ring_thickness: default_parent_ring_thickness(),
             child_ring_thickness: default_child_ring_thickness(),
             grand_ring_thickness: default_grand_ring_thickness(),
+            parent_slice_count: default_slice_count(),
+            child_slice_count: default_slice_count(),
+            grand_slice_count: default_slice_count(),
         }
     }
 }
@@ -522,6 +540,30 @@ impl Default for MenuConfig {
     }
 }
 
+fn empty_menu_item() -> MenuItem {
+    MenuItem {
+        name: String::new(),
+        path: String::new(),
+        children: vec![],
+        auto: None,
+    }
+}
+
+/// Keep parent item count aligned with `parent_slice_count`.
+pub fn normalize_parent_items(config: &mut MenuConfig) {
+    let n = clamp_slice_count(config.appearance.parent_slice_count) as usize;
+    config.appearance.parent_slice_count = n as u32;
+    config.appearance.child_slice_count = clamp_slice_count(config.appearance.child_slice_count);
+    config.appearance.grand_slice_count = clamp_slice_count(config.appearance.grand_slice_count);
+    if config.items.len() > n {
+        config.items.truncate(n);
+    } else {
+        while config.items.len() < n {
+            config.items.push(empty_menu_item());
+        }
+    }
+}
+
 pub fn get_config_path(app_handle: &AppHandle) -> PathBuf {
     app_handle
         .path()
@@ -532,19 +574,23 @@ pub fn get_config_path(app_handle: &AppHandle) -> PathBuf {
 
 pub fn load_config(app_handle: &AppHandle) -> MenuConfig {
     let path = get_config_path(app_handle);
-    if let Ok(content) = fs::read_to_string(&path) {
+    let mut config = if let Ok(content) = fs::read_to_string(&path) {
         serde_json::from_str(&content).unwrap_or_default()
     } else {
         MenuConfig::default()
-    }
+    };
+    normalize_parent_items(&mut config);
+    config
 }
 
 pub fn save_config(app_handle: &AppHandle, config: &MenuConfig) {
+    let mut config = config.clone();
+    normalize_parent_items(&mut config);
     let path = get_config_path(app_handle);
     if let Some(dir) = path.parent() {
         let _ = fs::create_dir_all(dir);
     }
-    if let Ok(content) = serde_json::to_string_pretty(config) {
+    if let Ok(content) = serde_json::to_string_pretty(&config) {
         let _ = fs::write(&path, content);
     }
 }

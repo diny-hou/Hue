@@ -17,12 +17,18 @@ import {
     OPACITY_DEFAULT_KEYS,
     PANEL_COLOR_TEXT_DEFAULT_KEYS,
     RING_SIZE_DEFAULT_KEYS,
+    SLICE_COUNT_DEFAULT_KEYS,
     TRAIL_DEFAULT_KEYS,
     WINDOW_THEME_DEFAULT_KEYS,
     pickAppearanceDefaults,
     type AppearancePreviewPayload,
 } from '../lib/appearanceDefaults';
 import { ringWeightPercents, resolveRingGeometry } from '../lib/ringGeometry';
+import {
+    applyChildGrandSlotLimits,
+    clampSliceCount,
+    resizeParentItems,
+} from '../lib/sliceCounts';
 import {
     HOVER_ANIMATION_OPTIONS,
     HOVER_SCALE_OPTIONS,
@@ -295,6 +301,15 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
     const [markingTrailColor, setMarkingTrailColor] = useState(
         config.appearance?.marking_trail_color ?? DEFAULT_APPEARANCE.marking_trail_color!,
     );
+    const [parentSliceCount, setParentSliceCount] = useState(
+        () => clampSliceCount(config.appearance?.parent_slice_count ?? DEFAULT_APPEARANCE.parent_slice_count),
+    );
+    const [childSliceCount, setChildSliceCount] = useState(
+        () => clampSliceCount(config.appearance?.child_slice_count ?? DEFAULT_APPEARANCE.child_slice_count),
+    );
+    const [grandSliceCount, setGrandSliceCount] = useState(
+        () => clampSliceCount(config.appearance?.grand_slice_count ?? DEFAULT_APPEARANCE.grand_slice_count),
+    );
 
     const [isRecording, setIsRecording] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -348,6 +363,9 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         prefs_chrome: prefsChrome,
         center_label: centerLabel,
         marking_trail_color: markingTrailColor,
+        parent_slice_count: clampSliceCount(parentSliceCount),
+        child_slice_count: clampSliceCount(childSliceCount),
+        grand_slice_count: clampSliceCount(grandSliceCount),
     });
 
     const emitPreview = (extra?: Partial<AppearancePreviewPayload>) => {
@@ -392,6 +410,9 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         if (d.prefs_chrome !== undefined) setPrefsChrome(normalizePrefsChrome(d.prefs_chrome));
         if (d.center_label !== undefined) setCenterLabel(d.center_label);
         if (d.marking_trail_color !== undefined) setMarkingTrailColor(d.marking_trail_color);
+        if (d.parent_slice_count !== undefined) setParentSliceCount(clampSliceCount(d.parent_slice_count));
+        if (d.child_slice_count !== undefined) setChildSliceCount(clampSliceCount(d.child_slice_count));
+        if (d.grand_slice_count !== undefined) setGrandSliceCount(clampSliceCount(d.grand_slice_count));
         window.setTimeout(() => emitPreview(extra), 0);
     };
 
@@ -422,6 +443,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
         childSplitRatio, pathPickRatio, retraceChildRatio, grandHybridExtraRatio,
         prefsBg, prefsAccent, prefsText, prefsChrome,
         centerLabel, markingTrailColor,
+        parentSliceCount, childSliceCount, grandSliceCount,
         activeTab,
     ]);
 
@@ -496,14 +518,22 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
 
             // Fetch the CURRENT config from disk to preserve unrelated fields
             const currentConfig = await invoke<MenuConfig>('get_config');
+            const appearance = buildAppearance();
+            const parentN = clampSliceCount(appearance.parent_slice_count);
+            const childN = clampSliceCount(appearance.child_slice_count);
+            const grandN = clampSliceCount(appearance.grand_slice_count);
+            let nextItems = autoDirty ? menuItems : currentConfig.items;
+            nextItems = resizeParentItems(nextItems, parentN);
+            nextItems = applyChildGrandSlotLimits(nextItems, childN, grandN);
 
             const newConfig: MenuConfig = {
                 ...currentConfig,
                 global_shortcut: shortcut,
-                appearance: buildAppearance(),
-                items: autoDirty ? menuItems : currentConfig.items,
+                appearance,
+                items: nextItems,
             };
             await invoke('update_config', { newConfig });
+            setMenuItems(cloneItems(nextItems));
             if (autoDirty) {
                 const synced = await invoke<MenuConfig>('sync_auto_items').catch(() => null);
                 if (synced) setMenuItems(cloneItems(synced.items));
@@ -708,6 +738,58 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                                 <em>Note: Changes to shortcut take effect immediately upon saving.</em>
                             </small>
                         </div>
+                        <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
+                            <label style={{ fontSize: '14px', fontWeight: 600 }}>Ring Slice Counts</label>
+                        </div>
+                        <div className="pref-row">
+                            <label>Parent</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="8"
+                                    step="1"
+                                    value={parentSliceCount}
+                                    onChange={(e) => setParentSliceCount(clampSliceCount(e.target.value))}
+                                />
+                                <span style={{ fontSize: '12px', minWidth: '3ch' }}>{parentSliceCount}</span>
+                            </div>
+                        </div>
+                        <div className="pref-row">
+                            <label>Child</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="8"
+                                    step="1"
+                                    value={childSliceCount}
+                                    onChange={(e) => setChildSliceCount(clampSliceCount(e.target.value))}
+                                />
+                                <span style={{ fontSize: '12px', minWidth: '3ch' }}>{childSliceCount}</span>
+                            </div>
+                        </div>
+                        <div className="pref-row">
+                            <label>Grandchild</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="8"
+                                    step="1"
+                                    value={grandSliceCount}
+                                    onChange={(e) => setGrandSliceCount(clampSliceCount(e.target.value))}
+                                />
+                                <span style={{ fontSize: '12px', minWidth: '3ch' }}>{grandSliceCount}</span>
+                            </div>
+                        </div>
+                        <div className="pref-row" style={{ marginTop: '4px' }}>
+                            <small style={{ color: '#aaa' }}>
+                                Auto mode: when there are more items than slots, keep circling to spiral through the list.
+                                Reducing parent count removes outer slices on Apply.
+                            </small>
+                        </div>
+                        <PrefTabReset onReset={() => applyDefaults(SLICE_COUNT_DEFAULT_KEYS)} />
                         <div className="pref-row" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
                             <label>Run on System Startup</label>
                             <label className="toggle-switch">

@@ -9,6 +9,7 @@ import {
     type MarkingTrailPoint,
 } from '../lib/markingTrail';
 import { resolveGestureThresholds, resolveRingGeometry } from '../lib/ringGeometry';
+import { clampSliceCount, resizeParentItems } from '../lib/sliceCounts';
 
 export interface AppearanceConfig {
     panel_opacity: number;
@@ -50,6 +51,10 @@ export interface AppearanceConfig {
     prefs_chrome?: 'normal' | 'glass' | string;
     center_label?: string;
     marking_trail_color?: string;
+    /** Parent / child / grand ring slice counts (1–8). */
+    parent_slice_count?: number;
+    child_slice_count?: number;
+    grand_slice_count?: number;
 }
 
 type GestureZone = 'dead' | 'parent' | 'switch' | 'freeze' | 'grand' | 'retrace';
@@ -151,18 +156,17 @@ function spiralIndexFromUnwrapped(unwrapped: number, sliceAngle: number, n: numb
     return positiveMod(Math.floor(unwrapped / sliceAngle), n);
 }
 
-const maxChildrenVisibleConst = 8;
-
 function ringIndexFromAngle(
     angleDeg: number,
     n: number,
     sliceAngle: number,
     halfSlice: number,
     spiral: boolean,
+    visibleSlots: number,
     unwrappedRef: React.MutableRefObject<number>,
     lastRawRef: React.MutableRefObject<number | null>,
 ): number {
-    if (!spiral || n <= maxChildrenVisibleConst) {
+    if (!spiral || n <= visibleSlots) {
         const adjusted = (angleDeg + halfSlice) % 360;
         return Math.floor(adjusted / sliceAngle);
     }
@@ -221,10 +225,11 @@ function resolveRingSlot(
     list: MenuItem[],
     spiral: boolean,
     base: number,
+    visibleSlots: number,
 ): { dataIdx: number; item: MenuItem | undefined } {
     const n = list.length;
     if (n === 0) return { dataIdx: slotIdx, item: undefined };
-    if (spiral && n > maxChildrenVisibleConst) {
+    if (spiral && n > visibleSlots) {
         const dataIdx = (base + slotIdx) % n;
         return { dataIdx, item: list[dataIdx] };
     }
@@ -483,6 +488,15 @@ export const PieMenu: React.FC = () => {
         configRef.current = items;
     }, [items]);
 
+    // Live-resize parent ring when slice count changes (Preferences preview or saved config).
+    useEffect(() => {
+        const n = clampSliceCount(configFull?.appearance?.parent_slice_count);
+        setItems((prev) => {
+            if (prev.length === 0 || prev.length === n) return prev;
+            return resizeParentItems(prev, n);
+        });
+    }, [configFull?.appearance?.parent_slice_count]);
+
     useEffect(() => {
         if (!isVisible) {
             invoke('reset_main_click_through').catch(() => {});
@@ -583,14 +597,16 @@ export const PieMenu: React.FC = () => {
         grandOuterRadius,
     } = rings;
 
+    const childSlots = clampSliceCount(configFull?.appearance?.child_slice_count);
+    const grandSlots = clampSliceCount(configFull?.appearance?.grand_slice_count);
+
     const sliceAngle = items.length > 0 ? 360 / items.length : 360;
     const halfSlice = sliceAngle / 2; // Offset so panels CENTER on cardinal directions
 
-    // We will display 8 children slots per parent in a full circle
-    const maxChildrenVisible = 8;
-    const childFanAngle = 360; // Total angle span is a full circle
-    const childSliceAngle = childFanAngle / maxChildrenVisible;
+    const childSliceAngle = 360 / childSlots;
     const childHalfSlice = childSliceAngle / 2;
+    const grandSliceAngle = 360 / grandSlots;
+    const grandHalfSlice = grandSliceAngle / 2;
 
     const gestureDebug = !!configFull?.appearance?.gesture_path_debug;
     const gestureCapture = !!configFull?.appearance?.gesture_path_capture;
@@ -885,14 +901,15 @@ export const PieMenu: React.FC = () => {
         const parentForChild = lockedMainEarly !== null ? items[lockedMainEarly] : undefined;
         const childList = parentForChild?.children ?? [];
         const childCount = childList.length;
-        const childSpiral = isAutoGroup(parentForChild) && childCount > maxChildrenVisible;
+        const childSpiral = isAutoGroup(parentForChild) && childCount > childSlots;
         const potentialChildIndex = parentForChild
             ? ringIndexFromAngle(
                 angleDeg,
-                Math.max(childCount, maxChildrenVisible),
+                Math.max(childCount, childSlots),
                 childSliceAngle,
                 childHalfSlice,
                 childSpiral,
+                childSlots,
                 childUnwrappedRef,
                 lastRawAngleChildRef,
             )
@@ -904,24 +921,25 @@ export const PieMenu: React.FC = () => {
             : undefined;
         const grandList = childForGrand?.children ?? [];
         const grandCount = grandList.length;
-        const grandSpiral = isAutoGroup(childForGrand) && grandCount > maxChildrenVisible;
+        const grandSpiral = isAutoGroup(childForGrand) && grandCount > grandSlots;
         const potentialGrandIndex = childForGrand
             ? ringIndexFromAngle(
                 angleDeg,
-                Math.max(grandCount, maxChildrenVisible),
-                childSliceAngle,
-                childHalfSlice,
+                Math.max(grandCount, grandSlots),
+                grandSliceAngle,
+                grandHalfSlice,
                 grandSpiral,
+                grandSlots,
                 grandUnwrappedRef,
                 lastRawAngleGrandRef,
             )
             : potentialChildIndex;
 
-        if (childSpiral && childCount > maxChildrenVisible) {
+        if (childSpiral && childCount > childSlots) {
             setChildSpiralBase(spiralBaseFromUnwrapped(childUnwrappedRef.current, childSliceAngle, childCount));
         }
-        if (grandSpiral && grandCount > maxChildrenVisible) {
-            setGrandSpiralBase(spiralBaseFromUnwrapped(grandUnwrappedRef.current, childSliceAngle, grandCount));
+        if (grandSpiral && grandCount > grandSlots) {
+            setGrandSpiralBase(spiralBaseFromUnwrapped(grandUnwrappedRef.current, grandSliceAngle, grandCount));
         }
 
         let captureEvent: string | undefined;
@@ -953,7 +971,7 @@ export const PieMenu: React.FC = () => {
         if (lockLevelRef.current === 1 && lockedMain !== null) {
             const parentItem = items[lockedMain];
             const nChildren = parentItem?.children?.length ?? 0;
-            const childSpiralActive = isAutoGroup(parentItem) && nChildren > maxChildrenVisible;
+            const childSpiralActive = isAutoGroup(parentItem) && nChildren > childSlots;
             const onChildPath =
                 stickyChildRef.current !== null
                 && potentialChildIndex === stickyChildRef.current;
@@ -983,7 +1001,7 @@ export const PieMenu: React.FC = () => {
                 distance >= childPickMin
                 && distance < th.childSwitchMax
                 && potentialChildIndex >= 0
-                && (childSpiralActive ? potentialChildIndex < nChildren : potentialChildIndex < maxChildrenVisible)
+                && (childSpiralActive ? potentialChildIndex < nChildren : potentialChildIndex < childSlots)
             ) {
                 // SWITCH ZONE — child may change (pick target before committing outward)
                 if (stickyChildRef.current !== potentialChildIndex) {
@@ -998,7 +1016,7 @@ export const PieMenu: React.FC = () => {
                 if (
                     stickyChildRef.current === null
                     && potentialChildIndex >= 0
-                    && (childSpiralActive ? potentialChildIndex < nChildren : potentialChildIndex < maxChildrenVisible)
+                    && (childSpiralActive ? potentialChildIndex < nChildren : potentialChildIndex < childSlots)
                 ) {
                     stickyChildRef.current = potentialChildIndex;
                     captureEvent = captureEvent ?? 'child_commit';
@@ -1027,7 +1045,7 @@ export const PieMenu: React.FC = () => {
             const stickyChild = stickyChildRef.current;
             const childItem = stickyChild !== null ? items[lockedMain]?.children?.[stickyChild] : undefined;
             const nGrand = childItem?.children?.length ?? 0;
-            const grandSpiralActive = isAutoGroup(childItem) && nGrand > maxChildrenVisible;
+            const grandSpiralActive = isAutoGroup(childItem) && nGrand > grandSlots;
             const onChildPath =
                 stickyChild !== null && potentialChildIndex === stickyChild;
 
@@ -1053,7 +1071,7 @@ export const PieMenu: React.FC = () => {
                 stickyChild !== null
                 && distance >= th.childSwitchMax
                 && potentialGrandIndex >= 0
-                && (grandSpiralActive ? potentialGrandIndex < nGrand : potentialGrandIndex < maxChildrenVisible)
+                && (grandSpiralActive ? potentialGrandIndex < nGrand : potentialGrandIndex < grandSlots)
             ) {
                 // Path / grand zone: pick grand by angle (even while skimming other child panels)
                 if (stickyGrandRef.current !== potentialGrandIndex) {
@@ -1098,8 +1116,8 @@ export const PieMenu: React.FC = () => {
                 grand: stickyGrandRef.current,
                 zone,
                 childSwitchable,
-                autoN: isAutoGroup(spiralParent) && spiralN > maxChildrenVisible ? spiralN : undefined,
-                spiralTurn: isAutoGroup(spiralParent) && spiralN > maxChildrenVisible
+                autoN: isAutoGroup(spiralParent) && spiralN > childSlots ? spiralN : undefined,
+                spiralTurn: isAutoGroup(spiralParent) && spiralN > childSlots
                     ? Math.floor(childUnwrappedRef.current / 360)
                     : undefined,
             });
@@ -1218,7 +1236,8 @@ export const PieMenu: React.FC = () => {
         angleDeg = (angleDeg + 90 + 360) % 360;
 
         const potentialMainIndex = Math.floor(((angleDeg + halfSlice) % 360) / sliceAngle);
-        const slotIdx = Math.floor(((angleDeg + childHalfSlice) % 360) / childSliceAngle);
+        const childSlotIdx = Math.floor(((angleDeg + childHalfSlice) % 360) / childSliceAngle);
+        const grandSlotIdx = Math.floor(((angleDeg + grandHalfSlice) % 360) / grandSliceAngle);
 
         const parentIdx = lockedMainRef.current
             ?? (activeIndex !== null && isGroupItem(items[activeIndex]) ? activeIndex : null)
@@ -1227,19 +1246,19 @@ export const PieMenu: React.FC = () => {
                 : null);
         const parentItem = parentIdx !== null ? items[parentIdx] : undefined;
         const childList = parentItem?.children ?? [];
-        const childSpiralCtx = isAutoGroup(parentItem) && childList.length > maxChildrenVisible;
+        const childSpiralCtx = isAutoGroup(parentItem) && childList.length > childSlots;
         const childDataIdx = childSpiralCtx && childList.length > 0
-            ? (childSpiralBase + slotIdx) % childList.length
-            : slotIdx;
+            ? (childSpiralBase + childSlotIdx) % childList.length
+            : childSlotIdx;
         const stickyChild = stickyChildRef.current ?? activeChildIndex;
         const childItem = parentIdx !== null && stickyChild !== null
             ? items[parentIdx]?.children?.[stickyChild]
             : undefined;
         const grandList = childItem?.children ?? [];
-        const grandSpiralCtx = isAutoGroup(childItem) && grandList.length > maxChildrenVisible;
+        const grandSpiralCtx = isAutoGroup(childItem) && grandList.length > grandSlots;
         const grandDataIdx = grandSpiralCtx && grandList.length > 0
-            ? (grandSpiralBase + slotIdx) % grandList.length
-            : slotIdx;
+            ? (grandSpiralBase + grandSlotIdx) % grandList.length
+            : grandSlotIdx;
 
         abortDragForEditor(currentTarget);
 
@@ -1256,8 +1275,8 @@ export const PieMenu: React.FC = () => {
             && stickyChild !== null
             && isGroupItem(childItem)
             && inGrandBand
-            && slotIdx >= 0
-            && slotIdx < maxChildrenVisible
+            && grandSlotIdx >= 0
+            && grandSlotIdx < grandSlots
         ) {
             lastEditorOpenMsRef.current = now;
             handleOpenEditor(parentIdx, stickyChild, grandDataIdx);
@@ -1269,8 +1288,8 @@ export const PieMenu: React.FC = () => {
             parentIdx !== null
             && isGroupItem(parentItem)
             && inChildBand
-            && slotIdx >= 0
-            && slotIdx < maxChildrenVisible
+            && childSlotIdx >= 0
+            && childSlotIdx < childSlots
         ) {
             lastEditorOpenMsRef.current = now;
             handleOpenEditor(parentIdx, childDataIdx);
@@ -1303,7 +1322,7 @@ export const PieMenu: React.FC = () => {
         setEditingGrandchildIndex(grandchildIdx);
 
         if (grandchildIdx !== null && childIdx !== null) {
-            const midAngle = grandchildIdx * childSliceAngle;
+            const midAngle = grandchildIdx * grandSliceAngle;
             const angleInRadians = ((midAngle - 90) * Math.PI) / 180.0;
             const outRadius = grandOuterRadius + 80;
             let spawnX = center + outRadius * Math.cos(angleInRadians);
@@ -1487,11 +1506,11 @@ export const PieMenu: React.FC = () => {
                     if (!isGroupItem(currentItem)) return null;
 
                     const childList = currentItem.children ?? [];
-                    const childSpiral = isAutoGroup(currentItem) && childList.length > maxChildrenVisible;
+                    const childSpiral = isAutoGroup(currentItem) && childList.length > childSlots;
                     const parentAuto = isAutoGroup(currentItem);
 
-                    return Array.from({ length: maxChildrenVisible }).map((_, slotIdx) => {
-                        const { dataIdx, item: child } = resolveRingSlot(slotIdx, childList, childSpiral, childSpiralBase);
+                    return Array.from({ length: childSlots }).map((_, slotIdx) => {
+                        const { dataIdx, item: child } = resolveRingSlot(slotIdx, childList, childSpiral, childSpiralBase, childSlots);
                         const startAngle = slotIdx * childSliceAngle - childHalfSlice;
                         const endAngle = startAngle + childSliceAngle - 2;
                         const pathD = describeArc(center, center, childInnerRadius, childOuterRadius, startAngle, endAngle);
@@ -1527,13 +1546,13 @@ export const PieMenu: React.FC = () => {
                     if (!childItem || !isGroupItem(childItem)) return null;
 
                     const grandList = childItem.children ?? [];
-                    const grandSpiral = isAutoGroup(childItem) && grandList.length > maxChildrenVisible;
+                    const grandSpiral = isAutoGroup(childItem) && grandList.length > grandSlots;
                     const childAuto = isAutoGroup(childItem);
 
-                    return Array.from({ length: maxChildrenVisible }).map((_, slotIdx) => {
-                        const { dataIdx, item: grand } = resolveRingSlot(slotIdx, grandList, grandSpiral, grandSpiralBase);
-                        const startAngle = slotIdx * childSliceAngle - childHalfSlice;
-                        const endAngle = startAngle + childSliceAngle - 2;
+                    return Array.from({ length: grandSlots }).map((_, slotIdx) => {
+                        const { dataIdx, item: grand } = resolveRingSlot(slotIdx, grandList, grandSpiral, grandSpiralBase, grandSlots);
+                        const startAngle = slotIdx * grandSliceAngle - grandHalfSlice;
+                        const endAngle = startAngle + grandSliceAngle - 2;
                         const pathD = describeArc(center, center, grandInnerRadius, grandOuterRadius, startAngle, endAngle);
                         const isGrandActive = activeGrandchildIndex === dataIdx;
                         const hasContent = !!grand && (grand.name.trim() || grand.path.trim());
@@ -1637,11 +1656,11 @@ export const PieMenu: React.FC = () => {
                 if (!isGroupItem(currentItem)) return null;
 
                 const childList = currentItem.children ?? [];
-                const childSpiral = isAutoGroup(currentItem) && childList.length > maxChildrenVisible;
+                const childSpiral = isAutoGroup(currentItem) && childList.length > childSlots;
                 const parentAuto = isAutoGroup(currentItem);
 
-                return Array.from({ length: maxChildrenVisible }).map((_, slotIdx) => {
-                    const { dataIdx, item: child } = resolveRingSlot(slotIdx, childList, childSpiral, childSpiralBase);
+                return Array.from({ length: childSlots }).map((_, slotIdx) => {
+                    const { dataIdx, item: child } = resolveRingSlot(slotIdx, childList, childSpiral, childSpiralBase, childSlots);
                     const midAngle = slotIdx * childSliceAngle;
 
                     const textRadius = childInnerRadius + (childOuterRadius - childInnerRadius) / 2;
@@ -1706,12 +1725,12 @@ export const PieMenu: React.FC = () => {
                 if (!childItem) return null;
 
                 const grandList = childItem.children ?? [];
-                const grandSpiral = isAutoGroup(childItem) && grandList.length > maxChildrenVisible;
+                const grandSpiral = isAutoGroup(childItem) && grandList.length > grandSlots;
                 const childAuto = isAutoGroup(childItem);
 
-                return Array.from({ length: maxChildrenVisible }).map((_, slotIdx) => {
-                    const { dataIdx, item: grand } = resolveRingSlot(slotIdx, grandList, grandSpiral, grandSpiralBase);
-                    const midAngle = slotIdx * childSliceAngle;
+                return Array.from({ length: grandSlots }).map((_, slotIdx) => {
+                    const { dataIdx, item: grand } = resolveRingSlot(slotIdx, grandList, grandSpiral, grandSpiralBase, grandSlots);
+                    const midAngle = slotIdx * grandSliceAngle;
 
                     const textRadius = grandInnerRadius + (grandOuterRadius - grandInnerRadius) / 2;
                     const angleInRadians = ((midAngle - 90) * Math.PI) / 180.0;
@@ -1859,7 +1878,12 @@ export const PieMenu: React.FC = () => {
                     allowChildren={editingGrandchildIndex === null}
                     allowAuto={!parentUsesAuto}
                     addChildrenLabel={editingChildIndex !== null ? '+ Add nested items' : '+ Add sub-items'}
-                    groupChildrenLabel={editingChildIndex !== null ? 'Nested Items (8 Slots)' : 'Group Items (8 Slots)'}
+                    maxSlots={editingChildIndex !== null ? grandSlots : childSlots}
+                    groupChildrenLabel={
+                        editingChildIndex !== null
+                            ? `Nested Items (${grandSlots} Slots)`
+                            : `Group Items (${childSlots} Slots)`
+                    }
                     onSave={(updatedItem: SliceItem) => {
                         const newItems = [...items];
 
