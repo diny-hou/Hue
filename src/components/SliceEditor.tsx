@@ -20,6 +20,8 @@ interface SliceEditorProps {
     position: { x: number; y: number };
     /** When false, nested children cannot be edited (e.g. grandchild depth). */
     allowChildren?: boolean;
+    /** When false, Auto toggle is hidden (e.g. parent already uses Auto). */
+    allowAuto?: boolean;
     addChildrenLabel?: string;
     groupChildrenLabel?: string;
     onSave: (item: SliceItem) => void;
@@ -40,6 +42,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
     item,
     position,
     allowChildren = true,
+    allowAuto = true,
     addChildrenLabel = '+ Add sub-items',
     groupChildrenLabel = 'Group Items (8 Slots)',
     onSave,
@@ -55,7 +58,8 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
     const [loading, setLoading] = useState(false);
     const inputRef = React.useRef<HTMLInputElement>(null);
 
-    const [autoEnabled, setAutoEnabled] = useState(!!item.auto?.enabled);
+    const autoAllowed = allowChildren && allowAuto;
+    const [autoEnabled, setAutoEnabled] = useState(!!item.auto?.enabled && allowAuto);
     const [autoFolder, setAutoFolder] = useState(item.auto?.folder ?? item.path ?? '');
     const [autoTag, setAutoTag] = useState(item.auto?.tag ?? '');
     const [autoPreview, setAutoPreview] = useState<AutoEntry[]>([]);
@@ -95,9 +99,15 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
     }, []);
 
     React.useEffect(() => {
-        if (!autoEnabled || !allowChildren) return;
+        if (!autoEnabled || !autoAllowed) return;
         void refreshAutoPreview(autoFolder, autoTag);
-    }, [autoEnabled, autoFolder, autoTag, allowChildren, refreshAutoPreview]);
+    }, [autoEnabled, autoFolder, autoTag, autoAllowed, refreshAutoPreview]);
+
+    React.useEffect(() => {
+        if (!allowAuto && autoEnabled) {
+            setAutoEnabled(false);
+        }
+    }, [allowAuto, autoEnabled]);
 
     React.useEffect(() => {
         if (pickerMenu === null) return;
@@ -230,7 +240,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
                 }))
                 : [];
 
-        const autoConfig: AutoConfig | null = allowChildren && autoEnabled
+        const autoConfig: AutoConfig | null = autoAllowed && autoEnabled
             ? {
                 enabled: true,
                 folder: autoFolder.trim() || path.trim(),
@@ -366,7 +376,15 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
                     />
                 </div>
 
-                {allowChildren && (
+                {allowChildren && !allowAuto && (
+                    <div className="slice-editor-section slice-editor-auto-section">
+                        <small className="slice-editor-auto-hint">
+                            Parent uses Auto — this slot is filled from the parent folder. Nested Auto is disabled here.
+                        </small>
+                    </div>
+                )}
+
+                {autoAllowed && (
                     <div className="slice-editor-section slice-editor-auto-section">
                         <div className="slice-editor-auto-header">
                             <label className="slice-editor-label">Auto (folder sync)</label>
@@ -383,7 +401,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
                             </label>
                         </div>
                         {autoEnabled && (
-                            <>
+                            <div className="slice-editor-auto-fields">
                                 <label className="slice-editor-label">Source folder</label>
                                 <div className="slice-editor-path-row">
                                     <input
@@ -398,14 +416,13 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
                                             className="slice-editor-browse"
                                             onClick={e => {
                                                 e.stopPropagation();
-                                                setPickerMenu(pickerMenu === 'auto' ? null : 'auto');
+                                                void pick('folder', 'auto');
                                             }}
                                             disabled={loading}
                                             title="Pick folder"
                                         >
                                             <FolderOpen size={16} />
                                         </button>
-                                        {pickerMenu === 'auto' && renderPickerMenu('auto')}
                                     </div>
                                 </div>
                                 <label className="slice-editor-label">Filename tag (optional)</label>
@@ -431,7 +448,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
                                                 {autoPreview.length > 8 ? ' · spiral when >8' : ''}
                                             </span>
                                             {autoPreview.slice(0, 5).map((entry, i) => (
-                                                <span key={i} className="slice-editor-auto-preview-item">{entry.name}</span>
+                                                <span key={`${entry.path}-${i}`} className="slice-editor-auto-preview-item">{entry.name}</span>
                                             ))}
                                             {autoPreview.length > 5 && (
                                                 <span className="slice-editor-auto-preview-more">+{autoPreview.length - 5} more</span>
@@ -439,7 +456,7 @@ export const SliceEditor: React.FC<SliceEditorProps> = ({
                                         </>
                                     )}
                                 </div>
-                            </>
+                            </div>
                         )}
                     </div>
                 )}

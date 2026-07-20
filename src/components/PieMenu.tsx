@@ -1631,12 +1631,17 @@ export const PieMenu: React.FC = () => {
                         ? `editor-${editingIndex}-${editingChildIndex}`
                         : `editor-${editingIndex}-main`;
 
+                const parentUsesAuto =
+                    editingChildIndex !== null
+                    && !!items[editingIndex]?.auto?.enabled;
+
                 return (
                 <SliceEditor
                     key={editorKey}
                     item={editingItem}
                     position={editingPos}
                     allowChildren={editingGrandchildIndex === null}
+                    allowAuto={!parentUsesAuto}
                     addChildrenLabel={editingChildIndex !== null ? '+ Add nested items' : '+ Add sub-items'}
                     groupChildrenLabel={editingChildIndex !== null ? 'Nested Items (8 Slots)' : 'Group Items (8 Slots)'}
                     onSave={(updatedItem: SliceItem) => {

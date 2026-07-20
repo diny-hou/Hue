@@ -241,6 +241,9 @@ fn sync_item_children(item: &mut MenuItem) -> bool {
                 eprintln!("[Hue auto] sync failed for {}: {err}", folder);
             }
         }
+        // Auto owns this node's children as a flat file list — do not recurse
+        // (would fight nested Auto and get wiped on the next parent sync).
+        return changed;
     }
     for child in item.children.iter_mut() {
         if sync_item_children(child) {
