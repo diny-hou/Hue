@@ -763,7 +763,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         </div>
                         <div className="pref-row" style={{ marginTop: '4px' }}>
                             <small style={{ color: '#aaa' }}>
-                                Registered Auto sources by depth. Empty tag = all files in that folder only (not recursive).
+                                Registered Auto sources by depth. Empty tag = files and folders in that directory only (not recursive).
                                 Reorder with arrows, change folder/tag, then Apply.
                             </small>
                         </div>

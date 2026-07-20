@@ -168,8 +168,8 @@ pub fn auto_tag(item: &MenuItem) -> &str {
     item.auto.as_ref().map(|a| a.tag.as_str()).unwrap_or("")
 }
 
-/// List files directly inside `folder` (non-recursive). Subdirectories are ignored.
-/// Empty / whitespace `tag` → include every file. Non-empty → filename contains tag (case-insensitive).
+/// List files and folders directly inside `folder` (non-recursive).
+/// Empty / whitespace `tag` → include every entry. Non-empty → name contains tag (case-insensitive).
 pub fn list_auto_entries(folder: &str, tag: &str) -> Result<Vec<AutoEntry>, String> {
     let dir = std::path::Path::new(folder.trim());
     if !dir.is_dir() {
@@ -184,8 +184,10 @@ pub fn list_auto_entries(folder: &str, tag: &str) -> Result<Vec<AutoEntry>, Stri
     for entry in read_dir {
         let entry = entry.map_err(|e| format!("Failed to read entry: {e}"))?;
         let path = entry.path();
-        // Non-recursive: files only at this level
-        if !path.is_file() {
+        // Non-recursive: only the immediate files and folders
+        let is_dir = path.is_dir();
+        let is_file = path.is_file();
+        if !is_dir && !is_file {
             continue;
         }
         let file_name = path
@@ -198,11 +200,14 @@ pub fn list_auto_entries(folder: &str, tag: &str) -> Result<Vec<AutoEntry>, Stri
         if filter_by_tag && !file_name.to_lowercase().contains(&tag_lower) {
             continue;
         }
-        let display = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or(file_name)
-            .to_string();
+        let display = if is_dir {
+            file_name.to_string()
+        } else {
+            path.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or(file_name)
+                .to_string()
+        };
         entries.push(AutoEntry {
             name: display,
             path: path.to_string_lossy().into_owned(),
@@ -212,7 +217,16 @@ pub fn list_auto_entries(folder: &str, tag: &str) -> Result<Vec<AutoEntry>, Stri
         }
     }
 
-    entries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    // Folders first, then files; alphabetical within each group
+    entries.sort_by(|a, b| {
+        let a_dir = std::path::Path::new(&a.path).is_dir();
+        let b_dir = std::path::Path::new(&b.path).is_dir();
+        match (a_dir, b_dir) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+        }
+    });
     Ok(entries)
 }
 
