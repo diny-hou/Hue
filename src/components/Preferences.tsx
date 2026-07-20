@@ -1251,7 +1251,7 @@ export const Preferences: React.FC<PreferencesProps> = ({ config, onClose, onSav
                         </div>
                         <div className="pref-row" style={{ marginTop: '4px' }}>
                             <small style={{ color: '#aaa' }}>
-                                Show trail, threshold rings, and lock HUD while dragging.
+                                Threshold rings and lock HUD while dragging. The marking trail is always shown during gestures.
                             </small>
                         </div>
                         <div className="pref-row" style={{ marginTop: '12px' }}>

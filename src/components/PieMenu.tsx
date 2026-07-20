@@ -3,6 +3,11 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { SliceEditor, SliceItem } from './SliceEditor';
 import type { AppearancePreviewPayload } from '../lib/appearanceDefaults';
+import {
+    markingTrailSegments,
+    pushMarkingTrailPoint,
+    type MarkingTrailPoint,
+} from '../lib/markingTrail';
 import { resolveGestureThresholds, resolveRingGeometry } from '../lib/ringGeometry';
 
 export interface AppearanceConfig {
@@ -286,11 +291,11 @@ export const PieMenu: React.FC = () => {
     const lastAngleRef = React.useRef(0);
     const lastShowTimeRef = React.useRef(0);
     const clickThroughStateRef = React.useRef({ editorOpen: false, hitDiskRadius: 180 });
-    const trailRef = React.useRef<{ x: number; y: number }[]>([]);
+    const markingTrailRef = React.useRef<MarkingTrailPoint[]>([]);
     const captureRef = React.useRef<CaptureSample[]>([]);
     const gestureStartMsRef = React.useRef(0);
     const debugReviewTimerRef = React.useRef<number | null>(null);
-    const [gestureTrail, setGestureTrail] = useState<{ x: number; y: number }[]>([]);
+    const [markingTrail, setMarkingTrail] = useState<MarkingTrailPoint[]>([]);
     const [captureTrail, setCaptureTrail] = useState<CaptureSample[]>([]);
     const [debugHud, setDebugHud] = useState<{
         lock: number;
@@ -373,8 +378,8 @@ export const PieMenu: React.FC = () => {
                 stickyGrandRef.current = null;
                 childLockedRef.current = false;
                 resetSpiralRefs();
-                trailRef.current = [];
-                setGestureTrail([]);
+                markingTrailRef.current = [];
+                setMarkingTrail([]);
                 setDebugHud(null);
                 updateActiveIndex(null);
                 setActiveChildIndex(null);
@@ -397,8 +402,9 @@ export const PieMenu: React.FC = () => {
                 stickyGrandRef.current = null;
                 childLockedRef.current = false;
                 resetSpiralRefs();
-                trailRef.current = [];
-                setGestureTrail([]);
+                markingTrailRef.current = [];
+                setMarkingTrail([]);
+                setCaptureTrail([]);
                 setDebugHud(null);
                 updateActiveIndex(null);
                 setActiveChildIndex(null);
@@ -588,23 +594,21 @@ export const PieMenu: React.FC = () => {
     const gestureCapture = !!configFull?.appearance?.gesture_path_capture;
     /** Rings while debug/capture OR Preferences open (live threshold tuning). */
     const showThresholdRings = gestureDebug || gestureCapture || prefsOpen;
-    /** Trail + HUD during debug/capture, or marking test drags while Preferences is open. */
+    /** HUD + capture analytics during debug/capture, or marking test in Preferences. */
     const showGestureOverlay = gestureDebug || gestureCapture || (prefsOpen && isDragging);
+    /** Product marking trail — always on while dragging (except capture mode). */
+    const showMarkingTrail = isDragging && !gestureCapture;
+    const markingTrailSegs = React.useMemo(
+        () => markingTrailSegments(markingTrail),
+        [markingTrail],
+    );
     const th = resolveGestureThresholds(configFull?.appearance);
     const DEAD_ZONE = 40;
 
-    const pushTrailPoint = (x: number, y: number) => {
-        if (!showGestureOverlay) return;
-        const trail = trailRef.current;
-        const last = trail[trail.length - 1];
-        if (last) {
-            const dx = x - last.x;
-            const dy = y - last.y;
-            if (dx * dx + dy * dy < 9) return;
-        }
-        trail.push({ x, y });
-        if (trail.length > 400) trail.shift();
-        setGestureTrail([...trail]);
+    const pushMarkingTrail = (x: number, y: number) => {
+        const next = pushMarkingTrailPoint(markingTrailRef.current, x, y);
+        markingTrailRef.current = next;
+        setMarkingTrail(next);
     };
 
     const pushCaptureSample = (sample: CaptureSample) => {
@@ -641,9 +645,13 @@ export const PieMenu: React.FC = () => {
         setActiveGrandchildIndex(stickyGrandRef.current);
     };
 
+    const clearMarkingTrail = () => {
+        markingTrailRef.current = [];
+        setMarkingTrail([]);
+    };
+
     const dismissMenu = () => {
-        trailRef.current = [];
-        setGestureTrail([]);
+        clearMarkingTrail();
         captureRef.current = [];
         setCaptureTrail([]);
         setDebugHud(null);
@@ -753,8 +761,7 @@ export const PieMenu: React.FC = () => {
         childLockedRef.current = false;
 
         if (prefsTest) {
-            trailRef.current = [];
-            setGestureTrail([]);
+            clearMarkingTrail();
             setDebugHud(null);
             resetSpiralRefs();
             if (launchMain !== null && lastDistanceRef.current >= DEAD_ZONE) {
@@ -820,8 +827,7 @@ export const PieMenu: React.FC = () => {
         stickyGrandRef.current = null;
         childLockedRef.current = false;
         resetSpiralRefs();
-        trailRef.current = [];
-        setGestureTrail([]);
+        clearMarkingTrail();
         captureRef.current = [];
         setCaptureTrail([]);
         gestureStartMsRef.current = performance.now();
@@ -854,7 +860,7 @@ export const PieMenu: React.FC = () => {
 
         const px = center + dx;
         const py = center + dy;
-        pushTrailPoint(px, py);
+        pushMarkingTrail(px, py);
 
         const adjusted = (angleDeg + halfSlice) % 360;
         const potentialMainIndex = Math.floor(adjusted / sliceAngle);
@@ -1535,6 +1541,58 @@ export const PieMenu: React.FC = () => {
                 })()}
             </svg>
 
+            {showMarkingTrail && markingTrail.length > 0 && (
+                <svg
+                    className="gesture-marking-overlay"
+                    viewBox={`0 0 ${size} ${size}`}
+                    pointerEvents="none"
+                >
+                    <defs>
+                        <filter id="marking-trail-glow" x="-50%" y="-50%" width="200%" height="200%">
+                            <feGaussianBlur stdDeviation="3" result="blur" />
+                            <feMerge>
+                                <feMergeNode in="blur" />
+                                <feMergeNode in="SourceGraphic" />
+                            </feMerge>
+                        </filter>
+                    </defs>
+                    <g className="gesture-marking-trail" filter="url(#marking-trail-glow)">
+                        {markingTrailSegs.map((seg, i) => (
+                            <g key={`mt-${i}`}>
+                                <line
+                                    className="gesture-marking-trail-glow"
+                                    x1={seg.x1}
+                                    y1={seg.y1}
+                                    x2={seg.x2}
+                                    y2={seg.y2}
+                                    strokeWidth={seg.width * 2.4}
+                                    opacity={seg.opacity * 0.22}
+                                />
+                                <line
+                                    className="gesture-marking-trail-core"
+                                    x1={seg.x1}
+                                    y1={seg.y1}
+                                    x2={seg.x2}
+                                    y2={seg.y2}
+                                    strokeWidth={seg.width}
+                                    opacity={seg.opacity * 0.92}
+                                />
+                            </g>
+                        ))}
+                    </g>
+                    {(() => {
+                        const last = markingTrail[markingTrail.length - 1];
+                        if (!last) return null;
+                        return (
+                            <g className="gesture-marking-head">
+                                <circle cx={last.x} cy={last.y} r={10} className="gesture-marking-head-halo" />
+                                <circle cx={last.x} cy={last.y} r={4.5} className="gesture-marking-head-core" />
+                            </g>
+                        );
+                    })()}
+                </svg>
+            )}
+
             {/* Unrotated overlay: pie-svg uses rotate(-90deg), so trail/rings must live outside it */}
             {showThresholdRings && (
                 <svg
@@ -1572,7 +1630,7 @@ export const PieMenu: React.FC = () => {
                             </text>
                         ))}
                     </g>
-                    {showGestureOverlay && (gestureCapture && captureTrail.length > 1
+                    {gestureCapture && captureTrail.length > 1
                         ? captureTrail.slice(1).map((sample, i) => {
                             const prev = captureTrail[i];
                             const zoneColor =
@@ -1594,25 +1652,7 @@ export const PieMenu: React.FC = () => {
                                 />
                             );
                         })
-                        : gestureTrail.length > 1 && (
-                            <polyline
-                                className="gesture-debug-trail"
-                                fill="none"
-                                points={gestureTrail.map(p => `${p.x},${p.y}`).join(' ')}
-                            />
-                        ))}
-                    {showGestureOverlay && (gestureCapture ? captureTrail : gestureTrail).length > 0 && (() => {
-                        const pts = gestureCapture ? captureTrail : gestureTrail;
-                        const last = pts[pts.length - 1];
-                        return (
-                            <circle
-                                className="gesture-debug-cursor"
-                                cx={last.x}
-                                cy={last.y}
-                                r={6}
-                            />
-                        );
-                    })()}
+                        : null}
                 </svg>
             )}
 
